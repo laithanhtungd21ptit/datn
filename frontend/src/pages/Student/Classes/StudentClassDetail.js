@@ -164,7 +164,10 @@ const StudentClassDetail = () => {
                 <ListItemIcon>
                   <Assignment color="primary" />
                 </ListItemIcon>
-                <ListItemText primary={asg.title} secondary={`Hạn: ${asg.deadline}`} />
+                <ListItemText
+                  primary={asg.title}
+                  secondary={`Hạn: ${asg.dueDate ? new Date(asg.dueDate).toLocaleDateString('vi-VN') : 'Chưa có hạn'}`}
+                />
               </ListItem>
             ))}
           </List>

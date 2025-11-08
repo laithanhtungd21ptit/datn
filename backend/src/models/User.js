@@ -13,6 +13,10 @@ const UserSchema = new mongoose.Schema(
     department: { type: String, default: '' },
     studentId: { type: String, default: '', index: true }, // Student ID for students (e.g., "B21DCPT001")
     teacherId: { type: String, default: '', index: true }, // Teacher ID for teachers (e.g., "GVPTIT001")
+    address: { type: String, default: '' },
+    dateOfBirth: { type: Date, default: null },
+    gender: { type: String, enum: ['Nam', 'Nữ', 'Khác'], default: 'Nam' },
+    avatar: { type: String, default: '' }, // Profile picture URL
     lastLoginAt: { type: Date, default: null },
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpiresAt: { type: Date, default: null },

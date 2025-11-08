@@ -24,6 +24,10 @@ import {
   Chip,
   Paper,
   CircularProgress,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Edit,
@@ -42,8 +46,10 @@ import {
   VisibilityOff,
 } from '@mui/icons-material';
 import { api } from '../../../api/client';
+import { useAuth } from '../../../auth/AuthContext';
 
 const StudentProfile = () => {
+  const { currentUser, login } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -79,30 +85,22 @@ const StudentProfile = () => {
         setError('');
         const data = await api.studentProfile();
         setProfile({
-          ...data,
-          address: '', // Address not in user model yet
-          major: data.department || 'Chưa cập nhật',
-          year: 'Năm 3', // Default value
-          class: 'IT01', // Default value
-          dateOfBirth: '2002-05-15', // Default value
-          gender: 'Nam', // Default value
-          avatar: null,
-          // Academic statistics from API
-          stats: data.stats || {},
-          enrolledClasses: data.enrolledClasses || []
+        ...data,
+        major: data.department || 'Chưa cập nhật',
+        year: 'Năm 3', // Default value
+        class: 'IT01', // Default value
+        // Academic statistics from API
+        stats: data.stats || {},
+        enrolledClasses: data.enrolledClasses || []
         });
         setTempProfile({
-          ...data,
-          address: '',
-          major: data.department || 'Chưa cập nhật',
-          year: 'Năm 3',
-          class: 'IT01',
-          dateOfBirth: '2002-05-15',
-          gender: 'Nam',
-          avatar: null,
-          // Academic statistics from API
-          stats: data.stats || {},
-          enrolledClasses: data.enrolledClasses || []
+        ...data,
+        major: data.department || 'Chưa cập nhật',
+        year: 'Năm 3',
+        class: 'IT01',
+        // Academic statistics from API
+        stats: data.stats || {},
+        enrolledClasses: data.enrolledClasses || []
         });
       } catch (err) {
         setError(err.message || 'Không thể tải thông tin cá nhân');
@@ -119,9 +117,36 @@ const StudentProfile = () => {
     setEditMode(true);
   };
 
-  const handleSaveProfile = () => {
-    setProfile(tempProfile);
-    setEditMode(false);
+  const handleSaveProfile = async () => {
+    try {
+      setLoading(true);
+      const updatedProfile = await api.studentUpdateProfile({
+        fullName: tempProfile.fullName,
+        email: tempProfile.email,
+        phone: tempProfile.phone,
+        address: tempProfile.address,
+        dateOfBirth: tempProfile.dateOfBirth,
+        gender: tempProfile.gender,
+        avatar: tempProfile.avatar
+      });
+      setProfile(updatedProfile);
+      setEditMode(false);
+      
+      // Update currentUser in AuthContext to reflect avatar change in header
+      if (currentUser) {
+        const token = localStorage.getItem('accessToken');
+        login(token, {
+          ...currentUser,
+          avatar: updatedProfile.avatar,
+          fullName: updatedProfile.fullName,
+          email: updatedProfile.email
+        });
+      }
+    } catch (error) {
+      setError(error.message || 'Không thể cập nhật thông tin cá nhân');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleCancelEdit = () => {
@@ -172,17 +197,40 @@ const StudentProfile = () => {
     }));
   };
 
-  const handleAvatarUpload = (event) => {
+  const handleAvatarUpload = async (event) => {
     const file = event.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
+      try {
+        // Create FormData for file upload
+        const formData = new FormData();
+        formData.append('avatar', file);
+
+        // Upload to server
+        const response = await api.studentUploadAvatar(formData);
+
+        // Update temp profile with the uploaded avatar URL
         setTempProfile(prev => ({
           ...prev,
-          avatar: e.target.result
+          avatar: response.avatar
         }));
-      };
-      reader.readAsDataURL(file);
+        
+        // Also update profile state immediately
+        setProfile(prev => ({
+          ...prev,
+          avatar: response.avatar
+        }));
+        
+        // Update currentUser in AuthContext immediately to show in header
+        if (currentUser) {
+          const token = localStorage.getItem('accessToken');
+          login(token, {
+            ...currentUser,
+            avatar: response.avatar
+          });
+        }
+      } catch (error) {
+        setError('Không thể tải lên ảnh đại diện');
+      }
     }
   };
 
@@ -292,9 +340,15 @@ const StudentProfile = () => {
                 <Grid item xs={12} sm={4}>
                   <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                     <Avatar
-                      src={editMode ? tempProfile.avatar : profile.avatar}
+                      src={
+                        editMode 
+                          ? (tempProfile.avatar ? `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${tempProfile.avatar}` : undefined)
+                          : (profile.avatar ? `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${profile.avatar}` : undefined)
+                      }
                       sx={{ width: 120, height: 120, mb: 2 }}
-                    />
+                    >
+                      {profile.fullName?.charAt(0).toUpperCase()}
+                    </Avatar>
                     {editMode && (
                       <Button
                         variant="outlined"
@@ -346,17 +400,44 @@ const StudentProfile = () => {
                       />
                     </Grid>
                     <Grid item xs={12} sm={6}>
-                      <TextField
-                        fullWidth
-                        label="Số điện thoại"
-                        value={editMode ? tempProfile.phone : profile.phone}
-                        onChange={(e) => handleInputChange('phone', e.target.value)}
-                        disabled={!editMode}
-                        InputProps={{
-                          startAdornment: <Phone sx={{ mr: 1, color: 'text.secondary' }} />
-                        }}
-                      />
+                    <TextField
+                    fullWidth
+                    label="Số điện thoại"
+                    value={editMode ? tempProfile.phone : profile.phone}
+                    onChange={(e) => handleInputChange('phone', e.target.value)}
+                    disabled={!editMode}
+                    InputProps={{
+                    startAdornment: <Phone sx={{ mr: 1, color: 'text.secondary' }} />
+                    }}
+                    />
                     </Grid>
+                     <Grid item xs={12} sm={6}>
+                       <TextField
+                         fullWidth
+                         label="Ngày sinh"
+                         type="date"
+                         value={editMode ? tempProfile.dateOfBirth : profile.dateOfBirth}
+                         onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+                         disabled={!editMode}
+                         InputLabelProps={{
+                           shrink: true,
+                         }}
+                       />
+                     </Grid>
+                     <Grid item xs={12} sm={6}>
+                       <FormControl fullWidth disabled={!editMode}>
+                         <InputLabel>Giới tính</InputLabel>
+                         <Select
+                           value={editMode ? tempProfile.gender : profile.gender}
+                           label="Giới tính"
+                           onChange={(e) => handleInputChange('gender', e.target.value)}
+                         >
+                           <MenuItem value="Nam">Nam</MenuItem>
+                           <MenuItem value="Nữ">Nữ</MenuItem>
+                           <MenuItem value="Khác">Khác</MenuItem>
+                         </Select>
+                       </FormControl>
+                     </Grid>
                     <Grid item xs={12}>
                       <TextField
                         fullWidth

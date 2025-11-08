@@ -41,6 +41,7 @@ authRouter.post('/login', async (req, res) => {
   fullName: user.fullName,
     email: user.email,
       status: user.status,
+      avatar: user.avatar || '',
     },
   });
 });

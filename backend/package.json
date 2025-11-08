@@ -6,7 +6,12 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "seed": "node src/scripts/seed.js",
+    "seed-students": "node src/scripts/seed-students.js",
+    "seed-classes": "node src/scripts/seed-classes.js",
     "reset": "node src/scripts/reset.js",
     "check-db": "node src/scripts/check-db.js",
     "migrate:index": "node -e \"import('dotenv/config');import('./src/models/Class.js');import('./src/models/Assignment.js');import('./src/models/Enrollment.js');import('./src/models/Submission.js');console.log('Models loaded');\""
@@ -19,12 +24,33 @@
     "express-rate-limit": "^7.4.0",
     "helmet": "^7.1.0",
     "http-proxy-middleware": "^3.0.0",
+    "joi": "^18.0.1",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.19.1",
     "multer": "^2.0.2",
-    "socket.io": "^4.8.1"
+    "nodemailer": "^7.0.10",
+    "socket.io": "^4.8.1",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.0"
+    "jest": "^30.2.0",
+    "nodemon": "^3.1.0",
+    "supertest": "^7.1.4"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": [
+      "**/tests/**/*.test.js"
+    ],
+    "collectCoverageFrom": [
+      "src/**/*.js",
+      "!src/index.js",
+      "!src/scripts/**",
+      "!src/tests/**"
+    ],
+    "setupFilesAfterEnv": [
+      "<rootDir>/src/tests/setup.js"
+    ]
   }
 }

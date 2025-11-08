@@ -163,31 +163,23 @@ studentRouter.get('/chat/contacts', async (req, res) => {
 
     const recipients = await getAllowedRecipientsHelper(studentId, 'student');
 
-    console.log('Chat contacts for student', studentId, ':', recipients.length, 'recipients');
-
-    const classmatesFiltered = recipients.filter(r => r.role === 'student').slice(0, 20); // Limit to 20
-    const teachersFiltered = recipients.filter(r => r.role === 'teacher').slice(0, 20); // Limit to 20
-    const adminsFiltered = recipients.filter(r => r.role === 'admin').slice(0, 5); // Limit to 5
-
-    console.log('Filtered - Classmates:', classmatesFiltered.length, 'Teachers:', teachersFiltered.length, 'Admins:', adminsFiltered.length);
-
     // Format for frontend compatibility
     res.json({
-      classmates: classmatesFiltered.map(r => ({
+      classmates: recipients.filter(r => r.role === 'student').map(r => ({
         id: r._id.toString(),
         name: r.fullName,
         username: r.username,
         studentId: r.studentId,
         role: r.role
       })),
-      teachers: teachersFiltered.map(r => ({
+      teachers: recipients.filter(r => r.role === 'teacher').map(r => ({
         id: r._id.toString(),
         name: r.fullName,
         username: r.username,
         teacherId: r.teacherId,
         role: r.role
       })),
-      admins: adminsFiltered.map(r => ({
+      admins: recipients.filter(r => r.role === 'admin').map(r => ({
         id: r._id.toString(),
         name: r.fullName,
         username: r.username,

@@ -490,6 +490,26 @@ teacherRouter.put('/assignments/:id', async (req, res) => {
   return res.json({ success: true });
 });
 
+// Upload file for assignment (attachments)
+teacherRouter.post('/assignments/:id/upload', upload.array('files', 3), async (req, res) => {
+const teacherId = req.user.id;
+const { id } = req.params;
+const assignment = await AssignmentModel.findById(id).lean();
+if (!assignment) return res.status(404).json({ error: 'NOT_FOUND' });
+const owns = await ClassModel.exists({ _id: assignment.classId, teacherId });
+if (!owns) return res.status(403).json({ error: 'FORBIDDEN' });
+
+  const fileUrls = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
+  if (fileUrls.length === 0) return res.status(400).json({ error: 'NO_FILES_UPLOADED' });
+
+  // Update assignment with attachment URLs
+  const updated = await AssignmentModel.findByIdAndUpdate(id, {
+    $push: { attachments: { $each: fileUrls } }
+  }, { new: true });
+
+  res.json({ success: true, attachments: updated.attachments || [] });
+});
+
 // Delete assignment (only if belongs to teacher's class)
 teacherRouter.delete('/assignments/:id', async (req, res) => {
   const teacherId = req.user.id;

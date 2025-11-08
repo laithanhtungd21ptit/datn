@@ -93,7 +93,7 @@ const AdminClassSubjectManagement = () => {
       try {
         const [classItems, teacherItems] = await Promise.all([
           api.adminClasses(),
-          api.adminAccounts({ role: 'teacher' })
+          api.adminAccounts({ role: 'teacher', pageSize: 1000 }) // Load all teachers
         ]);
         const teacherMap = teacherItems.items.reduce((acc, t) => {
           acc[t.id] = t.fullName;
@@ -152,9 +152,12 @@ const AdminClassSubjectManagement = () => {
     if (!newClass.name || !newClass.code || !newClass.teacherId) return;
     try {
       await api.adminCreateClass({ name: newClass.name, code: newClass.code, teacherId: newClass.teacherId, department: newClass.department });
-      const items = await api.adminClasses();
-      const teacherMap = teachers.reduce((acc, t) => {
-          acc[t.id] = t.name;
+      const [items, teacherItems] = await Promise.all([
+        api.adminClasses(),
+        api.adminAccounts({ role: 'teacher', pageSize: 1000 })
+      ]);
+      const teacherMap = teacherItems.items.reduce((acc, t) => {
+          acc[t.id] = t.fullName;
           return acc;
         }, {});
         setClasses(items.map(c => ({
@@ -184,9 +187,12 @@ const AdminClassSubjectManagement = () => {
       });
 
       // Refresh classes list
-      const items = await api.adminClasses();
-      const teacherMap = teachers.reduce((acc, t) => {
-        acc[t.id] = t.name;
+      const [items, teacherItems] = await Promise.all([
+        api.adminClasses(),
+        api.adminAccounts({ role: 'teacher', pageSize: 1000 })
+      ]);
+      const teacherMap = teacherItems.items.reduce((acc, t) => {
+        acc[t.id] = t.fullName;
         return acc;
       }, {});
       setClasses(items.map(c => ({

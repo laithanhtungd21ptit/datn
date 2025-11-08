@@ -13,32 +13,29 @@ import {
   Button,
   Chip,
   Avatar,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
-  Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  TextField,
 } from '@mui/material';
 import {
   Schedule,
   Assignment,
   Class,
-  Notifications,
-  Add,
-  MoreVert,
-  CheckCircle,
-  Warning,
-  Info,
   AccessTime,
   Grade,
+  Warning,
 } from '@mui/icons-material';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, BarChart, Bar } from 'recharts';
 import { api } from '../../../api/client';
 
 const StudentDashboard = () => {
-  const [openNotificationDialog, setOpenNotificationDialog] = useState(false);
-  const [selectedNotification, setSelectedNotification] = useState(null);
+
   const [openDeadlineDialog, setOpenDeadlineDialog] = useState(false);
   const [selectedDeadline, setSelectedDeadline] = useState(null);
   const [openGradeDialog, setOpenGradeDialog] = useState(false);
@@ -46,35 +43,7 @@ const StudentDashboard = () => {
   const [openExamDialog, setOpenExamDialog] = useState(false);
   const [selectedExam, setSelectedExam] = useState(null);
   
-  const [notifications, setNotifications] = useState([
-    { 
-      id: 1, 
-      title: 'Bài tập "Thuật toán sắp xếp" sắp hết hạn', 
-      time: '2 giờ trước', 
-      type: 'warning',
-      content: 'Bài tập về thuật toán sắp xếp sẽ hết hạn vào ngày mai (15/01/2024). Vui lòng hoàn thành và nộp bài trước 23:59. Nếu có thắc mắc, hãy liên hệ với giảng viên.',
-      sender: 'Thầy Nguyễn Văn A',
-      class: 'IT01 - Lập trình Web'
-    },
-    { 
-      id: 2, 
-      title: 'Điểm bài tập "Database Design" đã được công bố', 
-      time: '1 ngày trước', 
-      type: 'success',
-      content: 'Điểm số bài tập Database Design đã được cập nhật. Bạn có thể xem chi tiết điểm số và nhận xét trong mục Bài tập. Chúc mừng các bạn đã hoàn thành tốt!',
-      sender: 'Cô Trần Thị B',
-      class: 'IT02 - Cơ sở dữ liệu'
-    },
-    { 
-      id: 3, 
-      title: 'Lớp IT01 có thông báo mới từ giảng viên', 
-      time: '2 ngày trước', 
-      type: 'info',
-      content: 'Lịch học tuần tới sẽ có thay đổi. Buổi học thứ 3 sẽ được chuyển từ 14:00 thành 16:00. Vui lòng cập nhật lịch cá nhân và tham gia đầy đủ.',
-      sender: 'Thầy Nguyễn Văn A',
-      class: 'IT01 - Lập trình Web'
-    },
-  ]);
+
 
   const [upcomingExams, setUpcomingExams] = useState([
     { 
@@ -128,6 +97,10 @@ const StudentDashboard = () => {
   const [upcomingDeadlines, setUpcomingDeadlines] = useState([]);
 
   const [recentGrades, setRecentGrades] = useState([]);
+  const [gradesDisplayCount, setGradesDisplayCount] = useState(5);
+  const [selectedChartDate, setSelectedChartDate] = useState(null);
+  const [chartMode, setChartMode] = useState('overview'); // 'overview' or 'detailed'
+  const [chartDateFilter, setChartDateFilter] = useState('');
 
   const [gradeData, setGradeData] = useState([
     { name: 'Tuần 1', grade: 8.0 },
@@ -138,6 +111,8 @@ const StudentDashboard = () => {
     { name: 'Tuần 6', grade: 9.0 },
     { name: 'Tuần 7', grade: 8.5 },
   ]);
+
+  const [detailedGradeData, setDetailedGradeData] = useState([]);
 
   const [assignmentStatusData, setAssignmentStatusData] = useState([
     { name: 'Đã nộp', value: 12, color: '#388e3c' },
@@ -174,12 +149,27 @@ const StudentDashboard = () => {
           ]);
         }
 
-        // Create grade trend data from grades history
+        // Create grade trend data from grades history - group by day
         if (Array.isArray(data?.grades) && data.grades.length > 0) {
-          const gradeTrend = data.grades.slice(-7).map((grade, index) => ({
-            name: `Tuần ${index + 1}`,
-            grade: grade.score || 0
-          }));
+          const gradesByDay = {};
+          data.grades.forEach(grade => {
+            const date = new Date(grade.gradedAt).toLocaleDateString('vi-VN');
+            if (!gradesByDay[date]) {
+              gradesByDay[date] = [];
+            }
+            gradesByDay[date].push(grade.score || 0);
+          });
+
+          const gradeTrend = Object.entries(gradesByDay)
+            .sort(([a], [b]) => new Date(a) - new Date(b))
+            .slice(-7) // Last 7 days
+            .map(([date, scores]) => ({
+              date,
+              count: scores.length,
+              average: scores.reduce((sum, score) => sum + score, 0) / scores.length,
+              scores
+            }));
+
           setGradeData(gradeTrend);
         }
 
@@ -253,18 +243,7 @@ const StudentDashboard = () => {
           })));
         }
 
-        // Update notifications/announcements
-        if (Array.isArray(data?.announcements)) {
-          setNotifications(data.announcements.map((announcement, idx) => ({
-            id: announcement.id || idx,
-            title: announcement.title,
-            time: announcement.time,
-            type: announcement.type || 'info',
-            content: announcement.content,
-            sender: announcement.sender || 'Giảng viên',
-            class: announcement.class || 'Unknown Class'
-          })));
-        }
+
 
         // Update stats if available
         if (data?.stats) {
@@ -275,10 +254,7 @@ const StudentDashboard = () => {
           ]);
         }
 
-        // Update grade data for chart
-        if (Array.isArray(data?.grades) && data.grades.length > 0) {
-          setGradeData(data.grades.map((g, idx) => ({ name: `Tuần ${idx + 1}`, grade: g.score })));
-        }
+        
       } catch (e) {
         // Keep static data if API fails
         console.log('Dashboard API failed, using static data:', e);
@@ -286,10 +262,7 @@ const StudentDashboard = () => {
     })();
   }, []);
 
-  const handleViewNotification = (notification) => {
-    setSelectedNotification(notification);
-    setOpenNotificationDialog(true);
-  };
+
 
   const handleViewDeadline = (deadline) => {
     setSelectedDeadline(deadline);
@@ -306,19 +279,71 @@ const StudentDashboard = () => {
     setOpenExamDialog(true);
   };
 
-  const getNotificationIcon = (type) => {
-    switch (type) {
-      case 'success': return <CheckCircle color="success" />;
-      case 'warning': return <Warning color="warning" />;
-      case 'info': return <Info color="info" />;
-      default: return <Notifications />;
-    }
-  };
+
 
   const getDeadlineStatusColor = (daysLeft) => {
     if (daysLeft <= 1) return 'error';
     if (daysLeft <= 3) return 'warning';
     return 'success';
+  };
+
+  const handleChartBarClick = (data) => {
+    console.log('Chart clicked with data:', data);
+    if (chartMode === 'overview' && data && data.date) {
+      setSelectedChartDate(data.date);
+      setChartMode('detailed');
+
+      // Create detailed data for the selected date
+      const selectedDayData = recentGrades.filter(grade => grade.date === data.date);
+
+      console.log('Selected day data:', selectedDayData);
+      console.log('Recent grades:', recentGrades);
+
+      const detailedData = selectedDayData.map((grade, index) => ({
+        name: `${grade.assignment} (${grade.class})`,
+        grade: grade.grade, // Use grade.grade not grade.score
+        maxGrade: grade.maxGrade || 10
+      }));
+
+      console.log('Detailed data:', detailedData);
+      setDetailedGradeData(detailedData);
+    }
+  };
+
+  const handleBackToOverview = () => {
+    setChartMode('overview');
+    setSelectedChartDate(null);
+    setDetailedGradeData([]);
+  };
+
+  const handleDateFilterChange = (event) => {
+    const selectedDate = event.target.value;
+    setChartDateFilter(selectedDate);
+
+    if (selectedDate) {
+      // Filter grades for the selected date and show detailed view
+      const selectedDayData = recentGrades.filter(grade =>
+        new Date(grade.gradedAt).toLocaleDateString('vi-VN') === selectedDate
+      );
+
+      if (selectedDayData.length > 0) {
+        setSelectedChartDate(selectedDate);
+        setChartMode('detailed');
+
+        const detailedData = selectedDayData.map((grade, index) => ({
+          name: `${grade.assignment} (${grade.class})`,
+          grade: grade.score,
+          maxGrade: grade.maxGrade || 10
+        }));
+
+        setDetailedGradeData(detailedData);
+      }
+    } else {
+      // If no date selected, go back to overview
+      setChartMode('overview');
+      setSelectedChartDate(null);
+      setDetailedGradeData([]);
+    }
   };
 
   return (
@@ -420,37 +445,7 @@ const StudentDashboard = () => {
           </Paper>
         </Grid>
 
-        {/* Notifications */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography 
-                variant="h6" 
-                component="div"
-                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
-              >
-                <Notifications sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Thông báo mới
-              </Typography>
-              <IconButton size="small">
-                <MoreVert />
-              </IconButton>
-            </Box>
-            <List>
-              {notifications.map((notification) => (
-                <ListItem key={notification.id} divider button onClick={() => handleViewNotification(notification)}>
-                  <ListItemIcon>
-                    {getNotificationIcon(notification.type)}
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={notification.title}
-                    secondary={notification.time}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </Paper>
-        </Grid>
+
 
         {/* Upcoming Deadlines */}
         <Grid item xs={12} md={6}>
@@ -496,12 +491,25 @@ const StudentDashboard = () => {
         {/* Recent Grades */}
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
-            <Typography variant="h6" component="div" gutterBottom>
-              <Grade sx={{ mr: 1, verticalAlign: 'middle' }} />
-              Điểm số gần đây
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" component="div">
+                <Grade sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Điểm số gần đây
+              </Typography>
+              <FormControl size="small" sx={{ minWidth: 100 }}>
+                <InputLabel>Hiển thị</InputLabel>
+                <Select
+                  value={gradesDisplayCount}
+                  label="Hiển thị"
+                  onChange={(e) => setGradesDisplayCount(e.target.value)}
+                >
+                  <MenuItem value={5}>5 bản ghi</MenuItem>
+                  <MenuItem value={10}>10 bản ghi</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
             <List>
-              {recentGrades.map((grade, index) => (
+              {recentGrades.slice(0, gradesDisplayCount).map((grade, index) => (
                 <ListItem key={index} divider button onClick={() => handleViewGrade(grade)}>
                   <ListItemIcon>
                     <Grade color="primary" />
@@ -522,20 +530,67 @@ const StudentDashboard = () => {
         {/* Grade Progress Chart */}
         <Grid item xs={12} md={8}>
           <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
-            <Typography variant="h6" component="div" gutterBottom>
-              Xu hướng điểm số
-            </Typography>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2, flexWrap: 'wrap', gap: 2 }}>
+              <Typography variant="h6" component="div">
+                {chartMode === 'overview' ? 'Xu hướng điểm số' : `Chi tiết điểm số - ${selectedChartDate}`}
+              </Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                {chartMode === 'overview' && (
+                  <TextField
+                    type="date"
+                    size="small"
+                    label="Lọc theo ngày"
+                    value={chartDateFilter}
+                    onChange={handleDateFilterChange}
+                    InputLabelProps={{ shrink: true }}
+                    sx={{ minWidth: 150 }}
+                  />
+                )}
+                {chartMode === 'detailed' && (
+                  <Button size="small" onClick={handleBackToOverview}>
+                    Quay lại tổng quan
+                  </Button>
+                )}
+              </Box>
+            </Box>
             <Box sx={{ height: 300 }}>
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={gradeData}>
+                {chartMode === 'overview' ? (
+                  <BarChart data={gradeData} onClick={(data) => {
+                    if (data && data.activePayload && data.activePayload[0]) {
+                      handleChartBarClick(data.activePayload[0].payload);
+                    }
+                  }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis domain={[0, 10]} />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="grade" stroke="#1976d2" strokeWidth={2} />
-                </LineChart>
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip
+                  formatter={(value, name) => [
+                  name === 'count' ? `${value} điểm` : value,
+                  name === 'count' ? 'Số lượng' : name
+                  ]}
+                  labelFormatter={(label) => `Ngày: ${label}`}
+                  />
+                  <Bar dataKey="count" fill="#1976d2" cursor="pointer" />
+                  </BarChart>
+                ) : (
+                  <BarChart data={detailedGradeData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={80} />
+                    <YAxis domain={[0, 10]} />
+                    <Tooltip
+                      formatter={(value, name) => [`${value}/${name === 'grade' ? '10' : ''}`, 'Điểm số']}
+                    />
+                    <Bar dataKey="grade" fill="#1976d2" />
+                  </BarChart>
+                )}
               </ResponsiveContainer>
             </Box>
+            {chartMode === 'overview' && (
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', textAlign: 'center' }}>
+                Nhấn vào cột để xem chi tiết điểm số của ngày đó
+              </Typography>
+            )}
           </Paper>
         </Grid>
 
@@ -587,41 +642,7 @@ const StudentDashboard = () => {
         </Grid>
       </Grid>
 
-      {/* Notification Detail Dialog */}
-      <Dialog
-        open={openNotificationDialog}
-        onClose={() => setOpenNotificationDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          {selectedNotification?.title}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Người gửi: {selectedNotification?.sender}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Lớp: {selectedNotification?.class}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Thời gian: {selectedNotification?.time}
-            </Typography>
-          </Box>
-          
-          <Divider sx={{ mb: 2 }} />
-          
-          <Typography variant="body1">
-            {selectedNotification?.content}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenNotificationDialog(false)}>
-            Đóng
-          </Button>
-        </DialogActions>
-      </Dialog>
+      
 
       {/* Deadline Detail Dialog */}
       <Dialog

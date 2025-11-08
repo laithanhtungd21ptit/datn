@@ -8,6 +8,7 @@ const AssignmentSchema = new mongoose.Schema(
     dueDate: { type: Date, required: true },
     isExam: { type: Boolean, default: false },
     durationMinutes: { type: Number, default: null },
+    attachments: [{ type: String }], // File URLs for assignment attachments
     // Exam-specific fields
     startTime: { type: Date, default: null }, // When the exam starts
     endTime: { type: Date, default: null },   // When the exam ends (calculated from startTime + duration)

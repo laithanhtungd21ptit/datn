@@ -10,6 +10,7 @@ import { healthRouter } from './routes/health.js';
 import { aiProxyRouter } from './routes/aiProxy.js';
 import { apiRouter } from './routes/api/index.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { swaggerUi, specs } from './docs/swagger.js';
 import { connectMongo } from './db/mongo.js';
 import { bootstrapIndexes } from './db/bootstrap.js';
 import jwt from 'jsonwebtoken';
@@ -60,6 +61,9 @@ app.use(express.json());
 app.use('/health', healthRouter);
 app.use('/ai', aiProxyRouter);
 app.use('/api', apiRouter);
+
+// Swagger documentation
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 
 // Global error handler (must be last)
 app.use(errorHandler);
@@ -126,15 +130,15 @@ io.on('connection', (socket) => {
   });
 
   // Handle new message (real-time broadcast only)
-  socket.on('message_sent', (data) => {
-    // This is just for broadcasting, actual message saving is done via API
-    const { conversationId, message } = data;
+  socket.on('send_message', (data) => {
+  // This is just for broadcasting, actual message saving is done via API
+  const { conversationId, message } = data;
 
-    // Broadcast to all users in the conversation (except sender)
-    socket.to(`conversation_${conversationId}`).emit('new_message', {
-      conversationId,
-      message
-    });
+  // Broadcast to all users in the conversation (except sender)
+  socket.to(`conversation_${conversationId}`).emit('new_message', {
+  conversationId,
+  message
+  });
   });
 
   socket.on('disconnect', () => {

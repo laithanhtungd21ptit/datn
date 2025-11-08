@@ -253,16 +253,19 @@ const Layout = () => {
             </IconButton>
           )}
           <IconButton
-            size="large"
-            aria-label="account of current user"
-            aria-controls="menu-appbar"
-            aria-haspopup="true"
-            onClick={handleMenuClick}
-            color="inherit"
+          size="large"
+          aria-label="account of current user"
+          aria-controls="menu-appbar"
+          aria-haspopup="true"
+          onClick={handleMenuClick}
+          color="inherit"
           >
-            <Avatar sx={{ width: 32, height: 32 }}>
-              {displayName.charAt(0).toUpperCase()}
-            </Avatar>
+          <Avatar
+          src={currentUser?.avatar ? `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${currentUser.avatar}` : undefined}
+            sx={{ width: 32, height: 32 }}
+          >
+            {displayName.charAt(0).toUpperCase()}
+          </Avatar>
           </IconButton>
           <Menu
             id="menu-appbar"

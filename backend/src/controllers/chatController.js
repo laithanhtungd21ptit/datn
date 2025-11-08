@@ -52,6 +52,8 @@ const getAllowedRecipientsHelper = async (senderId, senderRole) => {
       status: 'enrolled'
     });
 
+    console.log('Student enrollments:', enrollments.length);
+
     const classIds = enrollments.map(e => e.classId);
 
     // Get classmates
@@ -62,15 +64,21 @@ const getAllowedRecipientsHelper = async (senderId, senderRole) => {
 
     const classmates = classmateEnrollments.map(e => e.studentId).filter(s => s);
 
+    console.log('Classmates found:', classmates.length);
+
     // Get teachers of enrolled classes
     const classes = await ClassModel.find({ _id: { $in: classIds } })
       .populate('teacherId', '_id fullName role username studentId teacherId');
 
     const teachers = classes.map(c => c.teacherId).filter(t => t);
 
+    console.log('Teachers found:', teachers.length);
+
     // Get admin users
     const admins = await UserModel.find({ role: 'admin' })
       .select('_id fullName role username studentId teacherId').lean();
+
+    console.log('Admins found:', admins.length);
 
     recipients = [...classmates, ...teachers, ...admins];
   }
@@ -357,7 +365,33 @@ export const getAllowedRecipients = async (req, res) => {
 
     const recipients = await getAllowedRecipientsHelper(userId, userRole);
 
-    res.json({ recipients });
+    // Format recipients by role for easier frontend consumption
+    const formattedRecipients = {
+      classmates: [],
+      teachers: [],
+      admins: []
+    };
+
+    recipients.forEach(recipient => {
+      const formattedRecipient = {
+        id: recipient._id.toString(),
+        name: recipient.fullName,
+        username: recipient.username,
+        role: recipient.role,
+        studentId: recipient.studentId || null,
+        teacherId: recipient.teacherId || null
+      };
+
+      if (recipient.role === 'student') {
+        formattedRecipients.classmates.push(formattedRecipient);
+      } else if (recipient.role === 'teacher') {
+        formattedRecipients.teachers.push(formattedRecipient);
+      } else if (recipient.role === 'admin') {
+        formattedRecipients.admins.push(formattedRecipient);
+      }
+    });
+
+    res.json({ recipients: formattedRecipients });
   } catch (error) {
     console.error('Get allowed recipients error:', error);
     res.status(500).json({ message: 'Lỗi khi lấy danh sách người nhận được phép' });
