@@ -171,11 +171,22 @@ if (io) {
   });
 }
 
-server.listen(port, async () => {
-  await connectMongo();
-  await bootstrapIndexes();
-  // eslint-disable-next-line no-console
-  console.log(`Backend listening on http://localhost:${port}`);
-});
+// For Vercel serverless, initialize database connection
+if (process.env.VERCEL) {
+  connectMongo().then(() => {
+    bootstrapIndexes().catch(err => console.error('Bootstrap error:', err));
+  }).catch(err => console.error('MongoDB connection error:', err));
+} else {
+  // For local development, start the server normally
+  server.listen(port, async () => {
+    await connectMongo();
+    await bootstrapIndexes();
+    // eslint-disable-next-line no-console
+    console.log(`Backend listening on http://localhost:${port}`);
+  });
+}
+
+// Export app for Vercel serverless
+export default app;
 
 

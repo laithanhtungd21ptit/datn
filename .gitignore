@@ -7,7 +7,10 @@ yarn-error.log*
 # Backend dependencies and artifacts
 backend/node_modules/
 backend/.env
-backend/.env.*
+backend/.env.local
+backend/.env.development.local
+backend/.env.test.local
+backend/.env.production.local
 backend/dist/
 backend/build/
 backend/.cache/
@@ -15,6 +18,8 @@ backend/coverage/
 backend/logs/
 backend/npm-debug.log*
 backend/yarn-error.log*
+# Allow .env.example
+!backend/.env.example
 
 # Production builds
 build/
