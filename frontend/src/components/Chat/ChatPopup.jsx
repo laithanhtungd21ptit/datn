@@ -182,7 +182,8 @@ const ChatPopup = () => {
   // Initialize socket connection
   useEffect(() => {
     if (currentUser && !socket) {
-      const newSocket = io(process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000', {
+      const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
+      const newSocket = io(backendUrl, {
         auth: {
           token: localStorage.getItem('accessToken')
         }

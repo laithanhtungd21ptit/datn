@@ -15,7 +15,11 @@ export async function apiRequest(path, options = {}) {
     headers['Content-Type'] = 'application/json';
   }
 
-  const response = await fetch(path, {
+  // Use backend URL from environment
+  const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
+  const fullUrl = path.startsWith('http') ? path : `${backendUrl}${path}`;
+
+  const response = await fetch(fullUrl, {
     credentials: 'include',
     headers,
     ...options,
