@@ -101,6 +101,17 @@ app.use(
 
 app.use(express.json());
 
+// Middleware to ensure DB connection for API routes (Vercel serverless optimization)
+app.use('/api', async (req, res, next) => {
+  try {
+    await connectMongo();
+    next();
+  } catch (error) {
+    console.error('Database connection failed:', error);
+    res.status(503).json({ error: 'SERVICE_UNAVAILABLE', message: 'Database connection failed' });
+  }
+});
+
 app.use('/health', healthRouter);
 app.use('/ai', aiProxyRouter);
 app.use('/api', apiRouter);

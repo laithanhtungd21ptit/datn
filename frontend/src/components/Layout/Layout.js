@@ -66,12 +66,26 @@ const Layout = () => {
   useEffect(() => {
     if (isStudent && currentUser) {
       const fetchNotifications = async () => {
-        try {
-          const notifications = await api.studentNotifications();
-          setNotificationsData(notifications);
-        } catch (error) {
-          console.error('Failed to fetch notifications:', error);
-        }
+        let retries = 0;
+        const maxRetries = 3;
+        
+        const attempt = async () => {
+          try {
+            const notifications = await api.studentNotifications();
+            setNotificationsData(notifications);
+          } catch (error) {
+            retries++;
+            if (retries < maxRetries) {
+              console.warn(`Retry fetching notifications (${retries}/${maxRetries})...`);
+              // Wait 500ms before retry
+              setTimeout(attempt, 500);
+            } else {
+              console.error('Failed to fetch notifications after retries:', error);
+            }
+          }
+        };
+        
+        attempt();
       };
       fetchNotifications();
     }

@@ -863,6 +863,4 @@ studentRouter.post('/notifications/mark-all-read', async (req, res) => {
   }
 });
 
-});
-
 export { studentRouter };
