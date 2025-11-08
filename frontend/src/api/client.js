@@ -17,7 +17,12 @@ export async function apiRequest(path, options = {}) {
 
   // Use backend URL from environment
   const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
-  const fullUrl = path.startsWith('http') ? path : `${backendUrl}${path}`;
+  console.log('Using backend URL:', backendUrl, 'for path:', path);
+
+  // Ensure no double slashes
+  const cleanBackendUrl = backendUrl.replace(/\/$/, ''); // Remove trailing slash
+  const cleanPath = path.startsWith('/') ? path : `/${path}`; // Ensure leading slash
+  const fullUrl = path.startsWith('http') ? path : `${cleanBackendUrl}${cleanPath}`;
 
   const response = await fetch(fullUrl, {
     credentials: 'include',
