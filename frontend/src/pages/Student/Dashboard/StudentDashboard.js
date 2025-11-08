@@ -294,14 +294,18 @@ const StudentDashboard = () => {
       setChartMode('detailed');
 
       // Create detailed data for the selected date
-      const selectedDayData = recentGrades.filter(grade => grade.date === data.date);
+      // Filter by gradedAt field, not date field
+      const selectedDayData = recentGrades.filter(grade => {
+        const gradeDate = new Date(grade.gradedAt).toLocaleDateString('vi-VN');
+        return gradeDate === data.date;
+      });
 
       console.log('Selected day data:', selectedDayData);
       console.log('Recent grades:', recentGrades);
 
       const detailedData = selectedDayData.map((grade, index) => ({
         name: `${grade.assignment} (${grade.class})`,
-        grade: grade.grade, // Use grade.grade not grade.score
+        grade: grade.score, // Use score from API
         maxGrade: grade.maxGrade || 10
       }));
 

@@ -286,8 +286,10 @@ const ChatPopup = () => {
   const loadContacts = async () => {
     try {
       console.log('Loading contacts...');
-      const contacts = await api.chatRecipients();
-      console.log('Contacts loaded:', contacts);
+      const response = await api.chatRecipients();
+      console.log('Contacts loaded:', response);
+      // API returns { recipients: { classmates, teachers, admins } }
+      const contacts = response.recipients || response;
       setRecipients(contacts);
       setError('');
     } catch (error) {
