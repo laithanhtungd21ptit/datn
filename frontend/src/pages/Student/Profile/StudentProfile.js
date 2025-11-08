@@ -342,8 +342,8 @@ const StudentProfile = () => {
                     <Avatar
                       src={
                         editMode 
-                          ? (tempProfile.avatar ? `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${tempProfile.avatar}` : undefined)
-                          : (profile.avatar ? `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${profile.avatar}` : undefined)
+                          ? (tempProfile.avatar ? (tempProfile.avatar.startsWith('http') ? tempProfile.avatar : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${tempProfile.avatar}`) : undefined)
+                          : (profile.avatar ? (profile.avatar.startsWith('http') ? profile.avatar : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${profile.avatar}`) : undefined)
                       }
                       sx={{ width: 120, height: 120, mb: 2 }}
                     >

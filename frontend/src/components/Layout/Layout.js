@@ -261,7 +261,7 @@ const Layout = () => {
           color="inherit"
           >
           <Avatar
-          src={currentUser?.avatar ? `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${currentUser.avatar}` : undefined}
+          src={currentUser?.avatar ? (currentUser.avatar.startsWith('http') ? currentUser.avatar : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${currentUser.avatar}`) : undefined}
             sx={{ width: 32, height: 32 }}
           >
             {displayName.charAt(0).toUpperCase()}
