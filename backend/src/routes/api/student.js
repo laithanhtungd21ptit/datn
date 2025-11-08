@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { authRequired } from '../../middleware/auth.js';
-import { upload } from '../../middleware/upload.js';
+import { upload, useCloudinary } from '../../middleware/upload.js';
+import { uploadToCloudinary, deleteFromCloudinary } from '../../middleware/cloudinary.js';
 import { UserModel } from '../../models/User.js';
 import { EnrollmentModel } from '../../models/Enrollment.js';
 import { ClassModel } from '../../models/Class.js';
@@ -663,7 +664,28 @@ studentRouter.post('/profile/avatar', upload.single('avatar'), async (req, res) 
   try {
     if (!req.file) return res.status(400).json({ error: 'NO_FILE_UPLOADED' });
 
-    const avatarUrl = `/uploads/${req.file.filename}`;
+    let avatarUrl;
+
+    if (useCloudinary) {
+      // Upload to Cloudinary
+      const fileName = `avatar-${userId}-${Date.now()}`;
+      const result = await uploadToCloudinary(req.file.buffer, fileName, 'datn2025/avatars');
+      avatarUrl = result.secure_url;
+
+      // Get old avatar URL from user to delete from Cloudinary
+      const user = await UserModel.findById(userId).select('avatar');
+      if (user && user.avatar && user.avatar.includes('cloudinary')) {
+        try {
+          const publicId = user.avatar.split('/').slice(-2).join('/').split('.')[0];
+          await deleteFromCloudinary(publicId);
+        } catch (err) {
+          console.warn('Could not delete old avatar from Cloudinary:', err);
+        }
+      }
+    } else {
+      // Use local disk storage
+      avatarUrl = `/uploads/${req.file.filename}`;
+    }
 
     await UserModel.findByIdAndUpdate(userId, { avatar: avatarUrl });
 
