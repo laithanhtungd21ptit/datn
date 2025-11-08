@@ -8,7 +8,8 @@ import { UserModel } from '../../models/User.js';
 import { DocumentModel } from '../../models/Document.js';
 import { AnnouncementModel } from '../../models/Announcement.js';
 import { CommentModel } from '../../models/Comment.js';
-import { upload } from '../../middleware/upload.js';
+import { upload, useCloudinary } from '../../middleware/upload.js';
+import { uploadToCloudinary, deleteFromCloudinary } from '../../middleware/cloudinary.js';
 import { logUserActivity } from '../../utils/logger.js';
 import path from 'path';
 
@@ -556,12 +557,24 @@ teacherRouter.post('/classes/:id/documents', upload.single('file'), async (req, 
   if (!req.file) return res.status(400).json({ error: 'NO_FILE' });
   if (!title) return res.status(400).json({ error: 'MISSING_TITLE' });
 
+  let fileUrl;
+  
+  if (useCloudinary) {
+    // Upload to Cloudinary for production
+    const fileName = `document-${id}-${Date.now()}-${req.file.originalname}`;
+    const result = await uploadToCloudinary(req.file.buffer, fileName, 'datn2025/documents');
+    fileUrl = result.secure_url;
+  } else {
+    // Use local storage for development
+    fileUrl = `/uploads/${req.file.filename}`;
+  }
+
   const document = await DocumentModel.create({
     classId: id,
     teacherId,
     title,
     description,
-    fileUrl: `/uploads/${req.file.filename}`,
+    fileUrl,
     fileName: req.file.originalname,
     fileSize: req.file.size,
     fileType: req.file.mimetype
@@ -605,6 +618,16 @@ teacherRouter.delete('/documents/:id', async (req, res) => {
   // Check if teacher owns the class
   const cls = await ClassModel.findOne({ _id: document.classId, teacherId }).lean();
   if (!cls) return res.status(403).json({ error: 'FORBIDDEN' });
+
+  // Delete from Cloudinary if applicable
+  if (useCloudinary && document.fileUrl && document.fileUrl.includes('cloudinary')) {
+    try {
+      const publicId = document.fileUrl.split('/').slice(-3).join('/').split('.')[0];
+      await deleteFromCloudinary(publicId);
+    } catch (err) {
+      console.warn('Could not delete document from Cloudinary:', err);
+    }
+  }
 
   await DocumentModel.findByIdAndDelete(id);
   res.json({ success: true });

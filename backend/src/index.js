@@ -42,10 +42,19 @@ if (server) {
 // Trust the first proxy (needed when behind dev proxy to respect X-Forwarded-For)
 app.set('trust proxy', 1);
 
-// Serve static files from uploads directory
+// Serve static files from uploads directory with proper headers
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+app.use('/uploads', (req, res, next) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET');
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+  next();
+}, express.static(path.join(__dirname, '../uploads'), {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Content-Disposition', 'attachment');
+  }
+}));
 
 const port = Number(process.env.PORT || 4000);
 

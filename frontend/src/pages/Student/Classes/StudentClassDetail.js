@@ -131,8 +131,10 @@ const StudentClassDetail = () => {
                     sx={{ mt: 1 }}
                     variant="outlined"
                     component="a"
-                    href={d.fileUrl}
+                    href={d.fileUrl.startsWith('http') ? d.fileUrl : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${d.fileUrl}`}
                     target="_blank"
+                    download
+                    rel="noopener noreferrer"
                     startIcon={<Description />}
                   >
                     Tải xuống

@@ -415,7 +415,15 @@ const TeacherClassDetail = () => {
         </Typography>
       </Box>
       <Box sx={{ display: 'flex', gap: 1 }}>
-      <IconButton size="small" color="primary" component="a" href={d.fileUrl} target="_blank">
+      <IconButton 
+        size="small" 
+        color="primary" 
+        component="a" 
+        href={d.fileUrl.startsWith('http') ? d.fileUrl : `${process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000'}${d.fileUrl}`}
+        target="_blank"
+        download
+        rel="noopener noreferrer"
+      >
         <Download />
       </IconButton>
       <IconButton size="small" color="error" onClick={() => handleDeleteDocument(d.id)}>
