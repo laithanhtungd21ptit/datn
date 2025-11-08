@@ -21,13 +21,23 @@ const app = express();
 
 // For Vercel serverless, don't create HTTP server
 const server = process.env.VERCEL ? null : createServer(app);
-const io = server ? new Server(server, {
-  cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
-    methods: ["GET", "POST"],
-    credentials: true
+
+// Initialize Socket.IO only if server exists
+let io = null;
+if (server) {
+  try {
+    io = new Server(server, {
+      cors: {
+        origin: process.env.FRONTEND_URL || "http://localhost:3000",
+        methods: ["GET", "POST"],
+        credentials: true
+      }
+    });
+    console.log('Socket.IO initialized');
+  } catch (error) {
+    console.error('Socket.IO initialization failed:', error);
   }
-}) : null;
+}
 
 // Trust the first proxy (needed when behind dev proxy to respect X-Forwarded-For)
 app.set('trust proxy', 1);
@@ -75,25 +85,27 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(specs));
 // Global error handler (must be last)
 app.use(errorHandler);
 
-// Socket.IO authentication middleware
-io.use((socket, next) => {
-  try {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-      return next(new Error('Authentication error: No token provided'));
+// Socket.IO initialization (only if io exists)
+if (io) {
+  // Socket.IO authentication middleware
+  io.use((socket, next) => {
+    try {
+      const token = socket.handshake.auth.token;
+      if (!token) {
+        return next(new Error('Authentication error: No token provided'));
+      }
+
+      const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret');
+      socket.user = { id: payload.sub, role: payload.role, username: payload.username };
+      next();
+    } catch (error) {
+      console.error('Socket authentication error:', error.message);
+      next(new Error('Authentication error: Invalid token'));
     }
+  });
 
-    const payload = jwt.verify(token, process.env.JWT_SECRET || 'dev_secret');
-    socket.user = { id: payload.sub, role: payload.role, username: payload.username };
-    next();
-  } catch (error) {
-    console.error('Socket authentication error:', error.message);
-    next(new Error('Authentication error: Invalid token'));
-  }
-});
-
-// Socket.IO chat functionality
-io.on('connection', (socket) => {
+  // Socket.IO chat functionality
+  io.on('connection', (socket) => {
   console.log('User connected:', socket.user.username, socket.id);
 
   // Join user to their rooms
@@ -156,7 +168,8 @@ io.on('connection', (socket) => {
   socket.on('error', (error) => {
     console.error('Socket error for user', socket.user.username, ':', error);
   });
-});
+  });
+}
 
 server.listen(port, async () => {
   await connectMongo();
