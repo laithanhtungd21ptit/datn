@@ -1,44 +1,48 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Box,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
-  Button,
-  Chip,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Paper,
-  Menu,
-  MenuItem,
-  Tabs,
-  Tab,
-  Avatar,
-  Alert,
-  LinearProgress,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
-  Divider,
+Box,
+Typography,
+Grid,
+Card,
+CardContent,
+CardActions,
+Button,
+Chip,
+IconButton,
+Dialog,
+DialogTitle,
+DialogContent,
+DialogActions,
+TextField,
+Paper,
+Menu,
+MenuItem,
+Tabs,
+Tab,
+Avatar,
+Alert,
+LinearProgress,
+List,
+ListItem,
+ListItemText,
+ListItemIcon,
+Divider,
+  FormControl,
+  InputLabel,
+  Select,
 } from '@mui/material';
 import {
-  AttachFile,
-  Schedule,
-  Comment,
-  Visibility,
-  Upload,
-  Download,
-  Send,
-  QuestionAnswer,
-  MoreVert,
+AttachFile,
+Schedule,
+Comment,
+Visibility,
+Upload,
+Download,
+Send,
+QuestionAnswer,
+MoreVert,
+  FilterList,
 } from '@mui/icons-material';
 import { api } from '../../../api/client';
 
@@ -48,6 +52,8 @@ const StudentAssignments = () => {
   const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [courseFilter, setCourseFilter] = useState('all');
+  const [classes, setClasses] = useState([]);
 
   const [comments] = useState([
     {
@@ -93,14 +99,20 @@ const StudentAssignments = () => {
       setLoading(true);
       setError('');
       try {
+        // Load classes for filter
+        const classesList = await api.studentClasses();
+        setClasses(classesList);
+
+        // Load assignments (đã được sort theo createdAt descending từ backend)
         const items = await api.studentAssignments();
 
-        // Sử dụng dữ liệu từ backend bao gồm thông tin submission
-        setAssignments((items || []).map(it => ({
+        // Process assignments data
+        const processedItems = (items || []).map(it => ({
           id: it.id,
           title: it.title,
           description: it.description || '',
           class: it.class || '',
+          classId: it.classId,
           teacher: it.teacher || '',
           deadline: it.dueDate ? new Date(it.dueDate).toISOString().slice(0, 10) : '',
           isExam: !!it.isExam,
@@ -110,14 +122,17 @@ const StudentAssignments = () => {
           status: it.status || 'not_submitted',
           grade: it.grade || null,
           comment: it.comment || '',
-        })));
+          createdAt: it.createdAt || new Date().toISOString(),
+        }));
+
+        setAssignments(processedItems);
       } catch (e) {
         setError(e?.message || 'Không thể tải danh sách bài tập');
       } finally {
         setLoading(false);
       }
     })();
-  }, []);
+    }, []);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -251,8 +266,47 @@ const StudentAssignments = () => {
         Bài tập của tôi
       </Typography>
       <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-        Quản lý và theo dõi tiến độ bài tập của bạn.
+      Quản lý và theo dõi tiến độ bài tập của bạn.
       </Typography>
+
+      {/* Bộ lọc */}
+      <Paper sx={{ p: 2, mb: 3 }}>
+      <Typography variant="h6" sx={{ mb: 2 }}>
+      <FilterList sx={{ mr: 1, verticalAlign: 'middle' }} />
+      Bộ lọc
+      </Typography>
+      <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <FormControl fullWidth>
+              <InputLabel>Lọc theo Lớp học</InputLabel>
+              <Select
+                value={courseFilter}
+                label="Lọc theo Lớp học"
+                onChange={(e) => setCourseFilter(e.target.value)}
+              >
+                <MenuItem value="all">Tất cả lớp học</MenuItem>
+                {classes.filter(cls => cls.id).map((cls) => (
+                  <MenuItem key={cls.id} value={cls.id}>
+                    {cls.name} ({cls.code})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      {loading && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Đang tải danh sách bài tập...
+        </Alert>
+      )}
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
 
       <Paper sx={{ mb: 3 }}>
         <Tabs value={tabValue} onChange={handleTabChange}>
@@ -264,9 +318,10 @@ const StudentAssignments = () => {
       </Paper>
 
       {tabValue === 0 && (
-        <Grid container spacing={3}>
-          {assignments.map((assignment) => (
-            <Grid item xs={12} md={6} key={assignment.id}>
+      <Grid container spacing={3}>
+      {assignments.filter(assignment => assignment.classId && (courseFilter === 'all' || String(assignment.classId) === String(courseFilter)))
+              .map((assignment) => (
+              <Grid item xs={12} md={6} key={assignment.id}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flexGrow: 1, cursor: 'pointer' }} onClick={() => handleViewDetail(assignment)}>
                   <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
@@ -388,14 +443,23 @@ const StudentAssignments = () => {
                   </Button>
                 </CardActions>
               </Card>
-            </Grid>
-          ))}
+                </Grid>
+                ))}
+              {assignments.filter(assignment => assignment.classId && (courseFilter === 'all' || String(assignment.classId) === String(courseFilter))).length === 0 && !loading && (
+                <Grid item xs={12}>
+                  <Typography variant="body1" color="text.secondary" align="center" sx={{ py: 4 }}>
+                    {courseFilter === 'all' ? 'Chưa có bài tập nào' : 'Không có bài tập nào cho lớp học này'}
+                  </Typography>
+                </Grid>
+              )}
         </Grid>
       )}
 
       {tabValue === 1 && (
-        <Grid container spacing={3}>
-          {assignments.filter(a => a.mySubmission.status === 'not_submitted' && new Date(a.deadline) >= new Date()).map((assignment) => (
+      <Grid container spacing={3}>
+      {assignments
+      .filter(a => a.classId && (courseFilter === 'all' || String(a.classId) === String(courseFilter)) && a.mySubmission.status === 'not_submitted' && new Date(a.deadline) >= new Date())
+      .map((assignment) => (
             <Grid item xs={12} md={6} key={assignment.id}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flexGrow: 1, cursor: 'pointer' }} onClick={() => handleViewDetail(assignment)}>
@@ -435,8 +499,10 @@ const StudentAssignments = () => {
       )}
 
       {tabValue === 2 && (
-        <Grid container spacing={3}>
-          {assignments.filter(a => a.mySubmission.status === 'submitted').map((assignment) => (
+      <Grid container spacing={3}>
+      {assignments
+      .filter(a => a.classId && (courseFilter === 'all' || String(a.classId) === String(courseFilter)) && a.mySubmission.status === 'submitted')
+      .map((assignment) => (
             <Grid item xs={12} md={6} key={assignment.id}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flexGrow: 1, cursor: 'pointer' }} onClick={() => handleViewDetail(assignment)}>
@@ -488,8 +554,10 @@ const StudentAssignments = () => {
       )}
 
       {tabValue === 3 && (
-        <Grid container spacing={3}>
-          {assignments.filter(a => a.status === 'graded').map((assignment) => (
+      <Grid container spacing={3}>
+      {assignments
+      .filter(a => a.classId && (courseFilter === 'all' || String(a.classId) === String(courseFilter)) && a.status === 'graded')
+      .map((assignment) => (
             <Grid item xs={12} md={6} key={assignment.id}>
               <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                 <CardContent sx={{ flexGrow: 1, cursor: 'pointer' }} onClick={() => handleViewDetail(assignment)}>

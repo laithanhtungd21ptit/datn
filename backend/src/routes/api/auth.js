@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { UserModel } from '../../models/User.js';
+import { logUserActivity } from '../../utils/logger.js';
 
 export const authRouter = Router();
 
@@ -26,23 +27,33 @@ authRouter.post('/login', async (req, res) => {
 
   // update last login timestamp (non-blocking)
   try {
-    await UserModel.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
+  await UserModel.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
+    // Log login activity
+    await logUserActivity(user._id, user.role, 'login', null, null, `User ${user.username} logged in`, {}, req);
   } catch {}
 
   return res.json({
-    accessToken: token,
-    user: {
-      id: String(user._id),
-      username: user.username,
-      role: user.role,
-      fullName: user.fullName,
-      email: user.email,
+  accessToken: token,
+  user: {
+  id: String(user._id),
+  username: user.username,
+  role: user.role,
+  fullName: user.fullName,
+    email: user.email,
       status: user.status,
     },
   });
 });
 
-authRouter.post('/logout', (_req, res) => {
+authRouter.post('/logout', async (req, res) => {
+  // Log logout activity if user is authenticated
+  if (req.user) {
+    try {
+      await logUserActivity(req.user.id, req.user.role, 'logout', null, null, `User ${req.user.username} logged out`, {}, req);
+    } catch (error) {
+      console.error('Failed to log logout activity:', error);
+    }
+  }
   return res.json({ success: true });
 });
 

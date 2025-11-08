@@ -9,6 +9,7 @@ import { DocumentModel } from '../../models/Document.js';
 import { AnnouncementModel } from '../../models/Announcement.js';
 import { CommentModel } from '../../models/Comment.js';
 import { upload } from '../../middleware/upload.js';
+import { logUserActivity } from '../../utils/logger.js';
 import path from 'path';
 
 export const teacherRouter = Router();
@@ -208,11 +209,11 @@ teacherRouter.get('/classes/:id', async (req, res) => {
   // Get enrolled students
   const enrollments = await EnrollmentModel.find({ classId: id, status: 'enrolled' }).lean();
   const studentIds = enrollments.map(e => e.studentId);
-  const users = await UserModel.find({ _id: { $in: studentIds } }).select('_id fullName email').lean();
+  const users = await UserModel.find({ _id: { $in: studentIds } }).select('_id fullName email studentId').lean();
   const userById = new Map(users.map(u => [String(u._id), u]));
   const students = enrollments.map(e => {
     const u = userById.get(String(e.studentId));
-    return { id: String(e.studentId), name: u?.fullName || '', email: u?.email || '' };
+    return { id: u?.studentId || String(e.studentId), name: u?.fullName || '', email: u?.email || '' };
   });
 
   // Get documents
@@ -252,8 +253,42 @@ teacherRouter.get('/classes/:id', async (req, res) => {
 
 teacherRouter.get('/assignments', async (req, res) => {
   const teacherId = req.user.id;
-  const classIds = await ClassModel.find({ teacherId }).distinct('_id');
-  const assignments = await AssignmentModel.find({ classId: { $in: classIds } }).sort({ dueDate: 1 }).lean();
+  const { courseId, assignmentName, sort = 'created_at:desc' } = req.query;
+
+  // Get teacher's classes
+  let classQuery = { teacherId };
+  if (courseId && courseId !== 'all') {
+    classQuery._id = courseId;
+  }
+  const classIds = await ClassModel.find(classQuery).distinct('_id');
+
+  // Build assignment query
+  let assignmentQuery = { classId: { $in: classIds } };
+  if (assignmentName && assignmentName !== 'all') {
+    assignmentQuery._id = assignmentName;
+  }
+
+  // Parse sort parameter (e.g., "created_at:desc", "due_date:asc")
+  let sortOption = { createdAt: -1 }; // Default: newest first
+  if (sort) {
+    const [field, order] = sort.split(':');
+    const sortOrder = order === 'desc' ? -1 : 1;
+    switch (field) {
+      case 'created_at':
+        sortOption = { createdAt: sortOrder };
+        break;
+      case 'due_date':
+        sortOption = { dueDate: sortOrder };
+        break;
+      case 'title':
+        sortOption = { title: sortOrder };
+        break;
+      default:
+        sortOption = { createdAt: sortOrder };
+    }
+  }
+
+  const assignments = await AssignmentModel.find(assignmentQuery).sort(sortOption).lean();
 
   // Get submission stats for each assignment
   const assignmentIds = assignments.map(a => a._id);
@@ -325,17 +360,20 @@ teacherRouter.get('/submissions', async (req, res) => {
   if (!teacherOwns) return res.status(403).json({ error: 'FORBIDDEN' });
   const list = await SubmissionModel.find({ assignmentId }).sort({ submittedAt: -1 }).lean();
   const studentIds = list.map(s => s.studentId);
-  const users = await UserModel.find({ _id: { $in: studentIds } }).select('_id fullName').lean();
-  const userById = new Map(users.map(u => [String(u._id), u.fullName]));
-  res.json(list.map(s => ({
-    id: String(s._id),
-    studentId: String(s.studentId),
-    studentName: userById.get(String(s.studentId)) || String(s.studentId),
-    submittedAt: s.submittedAt,
-    files: s.contentUrl ? s.contentUrl.split(';').filter(url => url) : [],
-    notes: s.notes,
-    score: s.score,
-  })));
+  const users = await UserModel.find({ _id: { $in: studentIds } }).select('_id fullName studentId').lean();
+  const userById = new Map(users.map(u => [String(u._id), u]));
+  res.json(list.map(s => {
+    const u = userById.get(String(s.studentId));
+    return {
+      id: String(s._id),
+      studentId: u?.studentId || String(s.studentId),
+      studentName: u?.fullName || String(s.studentId),
+      submittedAt: s.submittedAt,
+      files: s.contentUrl ? s.contentUrl.split(';').filter(url => url) : [],
+      notes: s.notes,
+      score: s.score,
+    };
+  }));
 });
 
 // Grade a submission
@@ -350,6 +388,42 @@ teacherRouter.put('/submissions/:id/grade', async (req, res) => {
   const teacherOwns = await ClassModel.exists({ _id: assignment.classId, teacherId });
   if (!teacherOwns) return res.status(403).json({ error: 'FORBIDDEN' });
   const updated = await SubmissionModel.findByIdAndUpdate(id, { $set: { score, notes: notes ?? submission.notes } }, { new: true });
+
+  // Create notification for the specific student
+  try {
+    const { createStudentNotification } = await import('../../utils/notification.js');
+    const student = await UserModel.findById(submission.studentId).select('fullName').lean();
+
+    await createStudentNotification(
+      teacherId,
+      submission.studentId,
+      assignment.classId,
+      'assignment_graded',
+      `Điểm bài tập: ${assignment.title}`,
+      `Bài nộp của bạn cho "${assignment.title}" đã được chấm. Điểm: ${score}/10.${notes ? ` Nhận xét: ${notes}` : ''}`,
+      { assignmentId: submission.assignmentId, score }
+    );
+  } catch (error) {
+    console.error('Failed to create grade notification:', error);
+  }
+
+  // Log grade submission activity
+  try {
+    const student = await UserModel.findById(submission.studentId).select('username fullName').lean();
+    await logUserActivity(
+      teacherId,
+      'teacher',
+      'grade_submission',
+      id,
+      'assignment',
+      `Graded submission for ${student?.fullName || 'Unknown student'}: ${score}/10`,
+      { assignmentId: submission.assignmentId, studentId: submission.studentId, score },
+      req
+    );
+  } catch (error) {
+    console.error('Failed to log grade submission activity:', error);
+  }
+
   res.json({ success: true, id: String(updated._id) });
 });
 
@@ -361,6 +435,38 @@ teacherRouter.post('/assignments', async (req, res) => {
   const cls = await ClassModel.findOne({ _id: classId, teacherId }).lean();
   if (!cls) return res.status(403).json({ error: 'FORBIDDEN' });
   const created = await AssignmentModel.create({ classId, title, dueDate, isExam: !!isExam, durationMinutes: durationMinutes ?? null, description });
+
+  // Create notifications for all students in the class
+  try {
+    const { createClassNotifications } = await import('../../utils/notification.js');
+    await createClassNotifications(
+      teacherId,
+      classId,
+      'assignment_created',
+      `Bài tập mới: ${title}`,
+      `Giảng viên đã giao bài tập "${title}". Hạn nộp: ${new Date(dueDate).toLocaleString('vi-VN')}.`,
+      { assignmentId: created._id }
+    );
+  } catch (error) {
+    console.error('Failed to create assignment notifications:', error);
+  }
+
+  // Log create assignment activity
+  try {
+    await logUserActivity(
+      teacherId,
+      'teacher',
+      'create_assignment',
+      created._id,
+      'assignment',
+      `Created ${isExam ? 'exam' : 'assignment'}: ${title}`,
+      { classId, className: cls.name, dueDate, isExam },
+      req
+    );
+  } catch (error) {
+    console.error('Failed to log create assignment activity:', error);
+  }
+
   return res.status(201).json({ id: String(created._id) });
 });
 
@@ -441,6 +547,21 @@ teacherRouter.post('/classes/:id/documents', upload.single('file'), async (req, 
     fileType: req.file.mimetype
   });
 
+  // Create notifications for all students in the class
+  try {
+    const { createClassNotifications } = await import('../../utils/notification.js');
+    await createClassNotifications(
+      teacherId,
+      id,
+      'document_uploaded',
+      `Tài liệu mới: ${title}`,
+      `Giảng viên đã tải lên tài liệu "${title}". Vui lòng kiểm tra và tải xuống nếu cần.`,
+      { documentId: document._id }
+    );
+  } catch (error) {
+    console.error('Failed to create document notifications:', error);
+  }
+
   res.status(201).json({
     id: String(document._id),
     title: document.title,
@@ -506,6 +627,21 @@ teacherRouter.post('/classes/:id/announcements', async (req, res) => {
     content,
     type
   });
+
+  // Create notifications for all students in the class
+  try {
+    const { createClassNotifications } = await import('../../utils/notification.js');
+    await createClassNotifications(
+      teacherId,
+      id,
+      'announcement_created',
+      `Thông báo: ${title}`,
+      announcement.content,
+      { announcementId: announcement._id }
+    );
+  } catch (error) {
+    console.error('Failed to create announcement notifications:', error);
+  }
 
   res.status(201).json({
     id: String(announcement._id),

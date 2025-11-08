@@ -1,58 +1,63 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  Box,
-  Typography,
-  Grid,
-  Card,
-  CardContent,
-  CardActions,
-  Button,
-  Chip,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Menu,
-  MenuItem,
-  Tabs,
-  Tab,
-  Avatar,
-
-  LinearProgress,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemIcon,
+Box,
+Typography,
+Grid,
+Card,
+CardContent,
+CardActions,
+Button,
+Chip,
+IconButton,
+Dialog,
+DialogTitle,
+DialogContent,
+DialogActions,
+TextField,
+Table,
+TableBody,
+TableCell,
+TableContainer,
+TableHead,
+TableRow,
+Paper,
+Menu,
+MenuItem,
+Tabs,
+Tab,
+Avatar,
+  FormControl,
+InputLabel,
+Select,
+LinearProgress,
+List,
+ListItem,
+ListItemText,
+ListItemIcon,
   Divider,
   Alert,
 } from '@mui/material';
 import {
-  Add,
-  MoreVert,
-  AttachFile,
-  Schedule,
-  People,
-  Grade,
-  Comment,
-  Edit,
-  Delete,
-  Visibility,
-  Download,
-  Send,
+Add,
+MoreVert,
+AttachFile,
+Schedule,
+People,
+Grade,
+Comment,
+Edit,
+Delete,
+Visibility,
+Download,
+Send,
+  FilterList,
 } from '@mui/icons-material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import dayjs from 'dayjs';
+import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { api } from '../../../api/client';
 
 const TeacherAssignments = () => {
@@ -74,6 +79,9 @@ const TeacherAssignments = () => {
   const [selectedItemForMenu, setSelectedItemForMenu] = useState(null);
   const [gradingData, setGradingData] = useState({ grade: '', comment: '' });
   const [filters, setFilters] = useState({ assignmentId: 'all', status: 'all', type: 'all', search: '' });
+  const [courseFilter, setCourseFilter] = useState('all');
+  const [assignmentFilter, setAssignmentFilter] = useState('all');
+  const [classes, setClasses] = useState([]);
   const [newComment, setNewComment] = useState('');
   // Comments removed from assignments page as they're not relevant here
   const [newExam, setNewExam] = useState({ isExam: false, startAt: null, durationMinutes: 60, requireMonitoring: true });
@@ -84,8 +92,15 @@ const TeacherAssignments = () => {
       setLoading(true);
       setError('');
       try {
-        const list = await api.teacherAssignmentsList();
-        setAssignments(list.map(a => ({
+        // Load assignments with filters
+        const params = {};
+        if (courseFilter !== 'all') params.courseId = courseFilter;
+        if (assignmentFilter !== 'all') params.assignmentName = assignmentFilter;
+        params.sort = 'created_at:asc'; // Sort by oldest first (left to right, top to bottom)
+
+        const list = await api.teacherAssignmentsList(params);
+        // Sort assignments by creation date (oldest first) to ensure correct order
+        const sortedAssignments = list.map(a => ({
           id: a.id,
           title: a.title,
           description: a.description,
@@ -100,8 +115,15 @@ const TeacherAssignments = () => {
           totalStudents: a.totalStudents,
           isExam: a.isExam,
           durationMinutes: a.durationMinutes,
-          attachments: []
-        })));
+          attachments: [],
+          createdAt: a.createdAt || new Date().toISOString(),
+        })).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
+        setAssignments(sortedAssignments);
+
+        // Load classes for filter
+        const classesList = await api.teacherClasses();
+        setClasses(classesList);
 
         // Check if there's an assignmentId in URL params (coming from class detail page)
         const assignmentId = searchParams.get('assignmentId');
@@ -132,7 +154,7 @@ const TeacherAssignments = () => {
         setLoading(false);
       }
     })();
-  }, [searchParams]);
+    }, [searchParams, courseFilter, assignmentFilter]);
 
   const loadSubmissionsForGrading = useCallback(async () => {
     try {
@@ -325,6 +347,23 @@ const TeacherAssignments = () => {
     handleMenuClose();
   };
 
+  const handleDeleteAssignment = async (assignment) => {
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa bài tập "${assignment.title}"? Hành động này không thể hoàn tác.`)) {
+      return;
+    }
+
+    try {
+      await api.teacherDeleteAssignment(assignment.id);
+
+      // Update local state
+      setAssignments(prev => prev.filter(a => a.id !== assignment.id));
+
+      handleMenuClose();
+    } catch (e) {
+      setError(e?.message || 'Không thể xóa bài tập');
+    }
+  };
+
   const submitEdit = async () => {
     if (!editForm.id || !editForm.title) return;
     try {
@@ -417,22 +456,77 @@ const TeacherAssignments = () => {
         </Box>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-            {error}
-          </Alert>
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+        {error}
+        </Alert>
         )}
 
+        {/* Filters */}
+        <Paper sx={{ p: 2, mb: 3 }}>
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            <FilterList sx={{ mr: 1, verticalAlign: 'middle' }} />
+            Bộ lọc
+        </Typography>
+          <Grid container spacing={2}>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth>
+                <InputLabel>Lọc theo Lớp học</InputLabel>
+                <Select
+                  value={courseFilter}
+                  label="Lọc theo Lớp học"
+                  onChange={(e) => {
+                    setCourseFilter(e.target.value);
+                    setAssignmentFilter('all'); // Reset assignment filter when course changes
+                  }}
+                >
+                  <MenuItem value="all">Tất cả lớp học</MenuItem>
+                  {classes.map((cls) => (
+                    <MenuItem key={cls.id} value={cls.id}>
+                      {cls.name} ({cls.code})
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <FormControl fullWidth>
+                <InputLabel>Lọc theo Bài tập</InputLabel>
+                <Select
+                  value={assignmentFilter}
+                  label="Lọc theo Bài tập"
+                  onChange={(e) => setAssignmentFilter(e.target.value)}
+                >
+                  <MenuItem value="all">Tất cả bài tập</MenuItem>
+                  {assignments
+                    .filter(a => courseFilter === 'all' || a.classId === courseFilter)
+                    .map((assignment) => (
+                      <MenuItem key={assignment.id} value={assignment.id}>
+                        {assignment.title}
+                      </MenuItem>
+                    ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          </Grid>
+        </Paper>
+
         <Paper sx={{ mb: 3 }}>
-          <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab label="Danh sách bài tập" />
-            <Tab label="Chấm điểm" />
-            <Tab label="Thống kê" />
-          </Tabs>
+        <Tabs value={tabValue} onChange={handleTabChange}>
+        <Tab label="Danh sách bài tập" />
+        <Tab label="Chấm điểm" />
+        <Tab label="Thống kê" />
+        </Tabs>
         </Paper>
 
         {tabValue === 0 && (
           <Grid container spacing={3}>
-            {assignments.map((assignment) => (
+            {assignments
+              .filter(assignment =>
+                (courseFilter === 'all' || assignment.classId === courseFilter) &&
+                (assignmentFilter === 'all' || assignment.id === assignmentFilter)
+              )
+              .sort((a, b) => new Date(b.dueDate || b.createdAt) - new Date(a.dueDate || a.createdAt))
+              .map((assignment) => (
               <Grid item xs={12} md={6} key={assignment.id}>
                 <Card 
                   sx={{ 
@@ -705,6 +799,154 @@ const TeacherAssignments = () => {
           </Paper>
         )}
 
+        {tabValue === 2 && (
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              Thống kê bài tập
+            </Typography>
+
+            {/* Apply same filters as list view */}
+            <Paper sx={{ p: 2, mb: 3 }}>
+              <Typography variant="subtitle1" sx={{ mb: 2 }}>
+                Áp dụng bộ lọc
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Chọn Lớp học</InputLabel>
+                    <Select
+                      value={courseFilter}
+                      label="Chọn Lớp học"
+                      onChange={(e) => {
+                        setCourseFilter(e.target.value);
+                        setAssignmentFilter('all');
+                      }}
+                    >
+                      <MenuItem value="all">Tất cả lớp học</MenuItem>
+                      {classes.map((cls) => (
+                        <MenuItem key={cls.id} value={cls.id}>
+                          {cls.name} ({cls.code})
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+                <Grid item xs={12} md={4}>
+                  <FormControl fullWidth>
+                    <InputLabel>Chọn Bài tập</InputLabel>
+                    <Select
+                      value={assignmentFilter}
+                      label="Chọn Bài tập"
+                      onChange={(e) => setAssignmentFilter(e.target.value)}
+                    >
+                      <MenuItem value="all">Tất cả bài tập</MenuItem>
+                      {assignments
+                        .filter(a => courseFilter === 'all' || a.classId === courseFilter)
+                        .map((assignment) => (
+                          <MenuItem key={assignment.id} value={assignment.id}>
+                            {assignment.title}
+                          </MenuItem>
+                        ))}
+                    </Select>
+                  </FormControl>
+                </Grid>
+              </Grid>
+            </Paper>
+
+            {/* Statistics Charts */}
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Tỷ lệ sinh viên chưa nộp bài
+                  </Typography>
+                  <Box sx={{ height: 300 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={[
+                            {
+                              name: 'Đã nộp',
+                              value: assignments
+                                .filter(a =>
+                                  (courseFilter === 'all' || a.classId === courseFilter) &&
+                                  (assignmentFilter === 'all' || a.id === assignmentFilter)
+                                )
+                                .reduce((sum, a) => sum + a.submittedStudents, 0)
+                            },
+                            {
+                              name: 'Chưa nộp',
+                              value: assignments
+                                .filter(a =>
+                                  (courseFilter === 'all' || a.classId === courseFilter) &&
+                                  (assignmentFilter === 'all' || a.id === assignmentFilter)
+                                )
+                                .reduce((sum, a) => sum + (a.totalStudents - a.submittedStudents), 0)
+                            }
+                          ]}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={5}
+                          dataKey="value"
+                          label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+                        >
+                          <Cell fill="#4caf50" />
+                          <Cell fill="#f44336" />
+                        </Pie>
+                        <Tooltip />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </Box>
+                </Paper>
+              </Grid>
+
+              <Grid item xs={12} md={6}>
+                <Paper sx={{ p: 2 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Thống kê tổng quan
+                  </Typography>
+                  <Box sx={{ p: 2 }}>
+                    {(() => {
+                      const filteredAssignments = assignments.filter(a =>
+                        (courseFilter === 'all' || a.classId === courseFilter) &&
+                        (assignmentFilter === 'all' || a.id === assignmentFilter)
+                      );
+
+                      const totalAssignments = filteredAssignments.length;
+                      const totalStudents = filteredAssignments.reduce((sum, a) => sum + a.totalStudents, 0);
+                      const totalSubmitted = filteredAssignments.reduce((sum, a) => sum + a.submittedStudents, 0);
+                      const totalGraded = filteredAssignments.reduce((sum, a) => sum + a.gradedStudents, 0);
+
+                      return (
+                        <Grid container spacing={2}>
+                          <Grid item xs={6}>
+                            <Typography variant="body2" color="text.secondary">Tổng bài tập</Typography>
+                            <Typography variant="h4" color="primary">{totalAssignments}</Typography>
+                          </Grid>
+                          <Grid item xs={6}>
+                            <Typography variant="body2" color="text.secondary">Tổng sinh viên</Typography>
+                            <Typography variant="h4" color="secondary">{totalStudents}</Typography>
+                          </Grid>
+                          <Grid item xs={6}>
+                            <Typography variant="body2" color="text.secondary">Đã nộp</Typography>
+                            <Typography variant="h4" sx={{ color: '#4caf50' }}>{totalSubmitted}</Typography>
+                          </Grid>
+                          <Grid item xs={6}>
+                            <Typography variant="body2" color="text.secondary">Đã chấm</Typography>
+                            <Typography variant="h4" sx={{ color: '#2196f3' }}>{totalGraded}</Typography>
+                          </Grid>
+                        </Grid>
+                      );
+                    })()}
+                  </Box>
+                </Paper>
+              </Grid>
+            </Grid>
+          </Box>
+        )}
+
         {/* Context Menu */}
         <Menu
           anchorEl={anchorEl}
@@ -721,7 +963,7 @@ const TeacherAssignments = () => {
                 <Edit sx={{ mr: 1 }} />
                 Chỉnh sửa
               </MenuItem>
-              <MenuItem sx={{ color: 'error.main' }}>
+              <MenuItem sx={{ color: 'error.main' }} onClick={() => handleDeleteAssignment(selectedItemForMenu)}>
                 <Delete sx={{ mr: 1 }} />
                 Xóa
               </MenuItem>
@@ -995,9 +1237,14 @@ const TeacherAssignments = () => {
             />
             <DatePicker
               label="Deadline"
-              sx={{ mt: 2, width: '100%' }}
-              value={createForm.dueDate ? createForm.dueDate : null}
-              onChange={(v) => setCreateForm(prev => ({ ...prev, dueDate: v ? new Date(v).toISOString() : '' }))}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  sx: { mt: 2 }
+                }
+              }}
+              value={createForm.dueDate ? dayjs(createForm.dueDate) : null}
+              onChange={(v) => setCreateForm(prev => ({ ...prev, dueDate: v ? v.toISOString() : '' }))}
             />
             <TextField
               margin="dense"
@@ -1036,7 +1283,7 @@ const TeacherAssignments = () => {
                       label="Thời gian bắt đầu"
                       disabled
                       value={null}
-                      sx={{ width: '100%' }}
+                      slotProps={{ textField: { fullWidth: true } }}
                     />
                     <TextField
                       label="Thời lượng (phút)"
@@ -1090,9 +1337,14 @@ const TeacherAssignments = () => {
             />
             <DatePicker
               label="Deadline"
-              sx={{ mt: 2, width: '100%' }}
-              value={editForm.dueDate ? editForm.dueDate : null}
-              onChange={(v) => setEditForm(prev => ({ ...prev, dueDate: v ? new Date(v).toISOString() : '' }))}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                  sx: { mt: 2 }
+                }
+              }}
+              value={editForm.dueDate ? dayjs(editForm.dueDate) : null}
+              onChange={(v) => setEditForm(prev => ({ ...prev, dueDate: v ? v.toISOString() : '' }))}
             />
 
             <Box sx={{ mt: 3 }}>

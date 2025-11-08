@@ -5,6 +5,8 @@ import { UserModel } from '../models/User.js';
 import { ClassModel } from '../models/Class.js';
 import { AssignmentModel } from '../models/Assignment.js';
 import { EnrollmentModel } from '../models/Enrollment.js';
+import { DocumentModel } from '../models/Document.js';
+import { AnnouncementModel } from '../models/Announcement.js';
 
 async function run() {
   await connectMongo();
@@ -28,15 +30,18 @@ async function run() {
     { username: 'student8', fullName: 'Sinh Vien H', email: 'student8@example.com', role: 'student', password: '123456', phone: '0123456791' },
   ];
 
-  // Generate student IDs for students
+  // Generate student IDs for students and teacher IDs for teachers
   let studentCounter = 1;
+  let teacherCounter = 1;
   const studentUsers = users.filter(u => u.role === 'student');
+  const teacherUsers = users.filter(u => u.role === 'teacher');
 
   for (const u of users) {
     const exists = await UserModel.findOne({ username: u.username }).lean();
     if (!exists) {
       const passwordHash = await bcrypt.hash(u.password, 10);
       const studentId = u.role === 'student' ? `B21DCPT${String(studentCounter++).padStart(3, '0')}` : '';
+      const teacherId = u.role === 'teacher' ? `GVPTIT${String(teacherCounter++).padStart(3, '0')}` : '';
 
       await UserModel.create({
         username: u.username,
@@ -46,14 +51,23 @@ async function run() {
         passwordHash,
         phone: u.phone,
         studentId,
+        teacherId,
       });
       // eslint-disable-next-line no-console
-      console.log('Seeded user:', u.username, u.role === 'student' ? `(Student ID: ${studentId})` : '');
-    } else if (u.role === 'student' && !exists.studentId) {
-      // Update existing students without studentId
-      const studentId = `B21DCPT${String(studentCounter++).padStart(3, '0')}`;
-      await UserModel.findByIdAndUpdate(exists._id, { studentId });
-      console.log('Updated user:', u.username, `(Student ID: ${studentId})`);
+      console.log('Seeded user:', u.username, u.role === 'student' ? `(Student ID: ${studentId})` : u.role === 'teacher' ? `(Teacher ID: ${teacherId})` : '');
+    } else {
+      // Update existing users without IDs
+      const updateData = {};
+      if (u.role === 'student' && !exists.studentId) {
+        updateData.studentId = `B21DCPT${String(studentCounter++).padStart(3, '0')}`;
+      }
+      if (u.role === 'teacher' && !exists.teacherId) {
+        updateData.teacherId = `GVPTIT${String(teacherCounter++).padStart(3, '0')}`;
+      }
+      if (Object.keys(updateData).length > 0) {
+        await UserModel.findByIdAndUpdate(exists._id, updateData);
+        console.log('Updated user:', u.username, updateData.studentId ? `(Student ID: ${updateData.studentId})` : updateData.teacherId ? `(Teacher ID: ${updateData.teacherId})` : '');
+      }
     }
   }
 
@@ -107,13 +121,19 @@ async function run() {
     classIds.push(cls._id);
   }
 
-  // Don't auto-enroll students - let them join manually by code
-  // Only enroll a few students to some classes for demo purposes
+  // Enroll students to classes for demo purposes
   const demoEnrollments = [
     { classCode: 'WEB101', studentUsername: 'student' },
     { classCode: 'WEB101', studentUsername: 'student2' },
+    { classCode: 'WEB101', studentUsername: 'student3' },
     { classCode: 'DB201', studentUsername: 'student' },
+    { classCode: 'DB201', studentUsername: 'student4' },
+    { classCode: 'JAVA201', studentUsername: 'student' },
+    { classCode: 'JAVA201', studentUsername: 'student5' },
     { classCode: 'ALG301', studentUsername: 'student3' },
+    { classCode: 'ALG301', studentUsername: 'student6' },
+    { classCode: 'DS401', studentUsername: 'student' },
+    { classCode: 'DS401', studentUsername: 'student2' },
   ];
 
   for (const enroll of demoEnrollments) {
@@ -237,6 +257,177 @@ async function run() {
           }
         }
       }
+    }
+  }
+
+  // Get actual submissions from database
+  const actualSubmissions = await SubmissionModel.find({}).sort({ createdAt: -1 }).limit(5).lean();
+
+  // Create sample notifications for students
+  const { NotificationModel } = await import('./models/Notification.js');
+
+  // Get some sample data for notifications
+  const sampleClasses = await ClassModel.find({}).limit(3).lean();
+  const sampleStudents = students.slice(0, 3);
+
+  for (const student of sampleStudents) {
+    for (const cls of sampleClasses.slice(0, 2)) { // Each student gets notifications from 2 classes
+      // Create assignment notification
+      const assignments = await AssignmentModel.find({ classId: cls._id }).limit(1).lean();
+      if (assignments.length > 0) {
+        const assignment = assignments[0];
+        await NotificationModel.create({
+          recipientId: student._id,
+          senderId: cls.teacherId,
+          classId: cls._id,
+          type: 'assignment_created',
+          title: `Bài tập mới: ${assignment.title}`,
+          content: `Giảng viên đã giao bài tập "${assignment.title}". Hạn nộp: ${new Date(assignment.dueDate).toLocaleString('vi-VN')}.`,
+          metadata: { assignmentId: assignment._id },
+          isRead: Math.random() > 0.5 // Random read status for demo
+        });
+      }
+
+      // Create document notification
+      const documents = await DocumentModel.find({ classId: cls._id }).limit(1).lean();
+      if (documents.length > 0) {
+        const document = documents[0];
+        await NotificationModel.create({
+          recipientId: student._id,
+          senderId: cls.teacherId,
+          classId: cls._id,
+          type: 'document_uploaded',
+          title: `Tài liệu mới: ${document.title}`,
+          content: `Giảng viên đã tải lên tài liệu "${document.title}". Vui lòng kiểm tra và tải xuống nếu cần.`,
+          metadata: { documentId: document._id },
+          isRead: Math.random() > 0.5
+        });
+      }
+
+      // Create announcement notification
+      const announcements = await AnnouncementModel.find({ classId: cls._id }).limit(1).lean();
+      if (announcements.length > 0) {
+        const announcement = announcements[0];
+        await NotificationModel.create({
+          recipientId: student._id,
+          senderId: cls.teacherId,
+          classId: cls._id,
+          type: 'announcement_created',
+          title: `Thông báo: ${announcement.title}`,
+          content: announcement.content,
+          metadata: { announcementId: announcement._id },
+          isRead: Math.random() > 0.5
+        });
+      }
+    }
+  }
+
+  console.log('Seeded sample notifications');
+
+  // Create sample user activities and system logs after all data is created
+  const { UserActivityModel } = await import('../models/UserActivity.js');
+  const { SystemLogModel } = await import('../models/SystemLog.js');
+
+  // Sample activities for different users
+  const activities = [
+    {
+      userId: admin._id,
+      role: 'admin',
+      actionType: 'login',
+      description: 'Admin logged in to system',
+      createdAt: new Date(Date.now() - 2 * 60 * 60 * 1000) // 2 hours ago
+    },
+    {
+      userId: teacher._id,
+      role: 'teacher',
+      actionType: 'create_assignment',
+      targetEntityId: allAssignments.length > 0 ? allAssignments[0]._id : null,
+      targetEntityType: 'assignment',
+      description: allAssignments.length > 0 ? `Created assignment: ${allAssignments[0].title}` : 'Created assignment',
+      metadata: allAssignments.length > 0 ? { classId: allAssignments[0].classId, dueDate: allAssignments[0].dueDate } : {},
+      createdAt: new Date(Date.now() - 24 * 60 * 60 * 1000) // 1 day ago
+    },
+    {
+      userId: student._id,
+      role: 'student',
+      actionType: 'submit_assignment',
+      targetEntityId: allAssignments.length > 0 ? allAssignments[0]._id : null,
+      targetEntityType: 'assignment',
+      description: allAssignments.length > 0 ? `Submitted assignment: ${allAssignments[0].title}` : 'Submitted assignment',
+      metadata: { filesCount: 1 },
+      createdAt: new Date(Date.now() - 12 * 60 * 60 * 1000) // 12 hours ago
+    },
+    {
+      userId: teacher._id,
+      role: 'teacher',
+      actionType: 'grade_submission',
+      targetEntityId: actualSubmissions.length > 0 ? actualSubmissions[0]._id : null,
+      targetEntityType: 'assignment',
+      description: `Graded submission for ${student.fullName}: 8.5/10`,
+      metadata: { score: 8.5, assignmentId: allAssignments.length > 0 ? allAssignments[0]._id : null, studentId: student._id },
+      createdAt: new Date(Date.now() - 6 * 60 * 60 * 1000) // 6 hours ago
+    },
+    {
+      userId: student._id,
+      role: 'student',
+      actionType: 'join_class',
+      targetEntityId: classIds.length > 0 ? classIds[0] : null,
+      targetEntityType: 'class',
+      description: 'Joined class via enrollment',
+      metadata: { classId: classIds.length > 0 ? classIds[0] : null },
+      createdAt: new Date(Date.now() - 48 * 60 * 60 * 1000) // 2 days ago
+    }
+  ];
+
+  for (const activity of activities) {
+    if (activity.targetEntityId) { // Only create if we have valid IDs
+      const exists = await UserActivityModel.findOne({
+        userId: activity.userId,
+        actionType: activity.actionType,
+        targetEntityId: activity.targetEntityId,
+        createdAt: activity.createdAt
+      });
+      if (!exists) {
+        await UserActivityModel.create(activity);
+        // eslint-disable-next-line no-console
+        console.log('Seeded user activity:', activity.actionType);
+      }
+    }
+  }
+
+  // Sample system logs
+  const systemLogs = [
+    {
+      level: 'error',
+      message: 'Database connection timeout',
+      source: 'database',
+      metadata: { connectionString: 'mongodb://localhost:27017', timeout: 10000 }
+    },
+    {
+      level: 'warn',
+      message: 'High memory usage detected',
+      source: 'server',
+      metadata: { memoryUsage: '85%', threshold: '80%' }
+    },
+    {
+      level: 'info',
+      message: 'User authentication successful',
+      source: 'auth',
+      userId: admin._id,
+      metadata: { username: 'admin', ipAddress: '127.0.0.1' }
+    }
+  ];
+
+  for (const log of systemLogs) {
+    const exists = await SystemLogModel.findOne({
+      level: log.level,
+      message: log.message,
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // Only check last 24 hours
+    });
+    if (!exists) {
+      await SystemLogModel.create(log);
+      // eslint-disable-next-line no-console
+      console.log('Seeded system log:', log.level, '-', log.message);
     }
   }
 

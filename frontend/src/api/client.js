@@ -81,8 +81,27 @@ export const api = {
   adminCreateEnrollment: (payload) => apiRequest('/api/admin/enrollments', { method: 'POST', body: JSON.stringify(payload) }),
   adminUpdateEnrollment: (id, payload) => apiRequest(`/api/admin/enrollments/${id}`, { method: 'PUT', body: JSON.stringify(payload) }),
   adminDeleteEnrollment: (id) => apiRequest(`/api/admin/enrollments/${id}`, { method: 'DELETE' }),
+  // Classes
+  adminGetClassDetail: (id) => apiRequest(`/api/admin/classes/${id}`),
+  // Reports
+  adminGetReportsUsers: (period = 'all') => apiRequest(`/api/admin/reports/users?period=${period}`),
+  adminGetReportsClasses: () => apiRequest('/api/admin/reports/classes'),
+  adminGetReportsAssignments: () => apiRequest('/api/admin/reports/assignments'),
+  adminExportReport: (reportType) => apiRequest('/api/admin/reports/export', { method: 'POST', body: JSON.stringify({ reportType }) }),
+  // Activity Logs
+  adminGetActivities: (limit = 50) => apiRequest(`/api/admin/activities?limit=${limit}`),
+  adminGetSystemLogs: (level = null, limit = 100) => apiRequest(`/api/admin/system-logs?${level ? `level=${level}&` : ''}limit=${limit}`),
+  adminSendNotification: (payload) => apiRequest('/api/admin/send-notification', { method: 'POST', body: JSON.stringify(payload) }),
   // Teacher: assignments and submissions
-  teacherAssignmentsList: () => apiRequest('/api/teacher/assignments'),
+  teacherAssignmentsList: (params = {}) => {
+    const sp = new URLSearchParams();
+    Object.entries(params || {}).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && String(v).trim() !== '') sp.set(k, String(v));
+    });
+    const query = sp.toString();
+    const path = query ? `/api/teacher/assignments?${query}` : '/api/teacher/assignments';
+    return apiRequest(path);
+  },
   teacherSubmissions: (assignmentId) => apiRequest(`/api/teacher/submissions?assignmentId=${encodeURIComponent(assignmentId)}`),
   teacherGradeSubmission: (id, payload) => apiRequest(`/api/teacher/submissions/${id}/grade`, { method: 'PUT', body: JSON.stringify(payload) }),
   teacherCreateAssignment: (payload) => apiRequest('/api/teacher/assignments', { method: 'POST', body: JSON.stringify(payload) }),
@@ -102,6 +121,30 @@ export const api = {
   studentGetComments: (classId) => apiRequest(`/api/student/classes/${classId}/comments`),
   studentCreateComment: (classId, payload) => apiRequest(`/api/student/classes/${classId}/comments`, { method: 'POST', body: JSON.stringify(payload) }),
   studentProfile: () => apiRequest('/api/student/profile'),
+  studentNotifications: () => apiRequest('/api/student/notifications'),
+  studentMarkNotificationRead: (id) => apiRequest(`/api/student/notifications/${id}/read`, { method: 'POST' }),
+  studentMarkAllNotificationsRead: () => apiRequest('/api/student/notifications/mark-all-read', { method: 'POST' }),
+  // Student Chat
+  studentChatContacts: () => apiRequest('/api/student/chat/contacts'),
+  studentChatMessages: (userId) => apiRequest(`/api/student/chat/messages/${userId}`),
+  studentSendMessage: (data) => apiRequest('/api/student/chat/messages', { method: 'POST', body: JSON.stringify(data) }),
+  studentMarkMessagesRead: (userId) => apiRequest(`/api/student/chat/messages/${userId}/read`, { method: 'POST' }),
+
+  // Chat APIs (for all roles)
+  chatConversations: () => apiRequest('/api/chat/conversations'),
+  chatMessages: (conversationId, params = {}) => {
+    const sp = new URLSearchParams();
+    Object.entries(params || {}).forEach(([k, v]) => {
+      if (v !== undefined && v !== null && String(v).trim() !== '') sp.set(k, String(v));
+    });
+    const query = sp.toString();
+    const path = query ? `/api/chat/conversations/${conversationId}/messages?${query}` : `/api/chat/conversations/${conversationId}/messages`;
+    return apiRequest(path);
+  },
+  chatCreateConversation: (payload) => apiRequest('/api/chat/conversations', { method: 'POST', body: JSON.stringify(payload) }),
+  chatSendMessage: (payload) => apiRequest('/api/chat/messages', { method: 'POST', body: JSON.stringify(payload) }),
+  chatRecipients: () => apiRequest('/api/chat/recipients'),
+  chatMarkAsRead: (conversationId) => apiRequest(`/api/chat/conversations/${conversationId}/read`, { method: 'POST' }),
 };
 
 

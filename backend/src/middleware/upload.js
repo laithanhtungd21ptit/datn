@@ -35,11 +35,15 @@ const fileFilter = (req, file, cb) => {
     'application/vnd.ms-excel',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'text/plain',
+    'text/csv',
+    'application/csv',
     'image/jpeg',
     'image/png',
     'image/gif',
     'application/zip',
-    'application/x-zip-compressed'
+    'application/x-zip-compressed',
+    'application/x-rar-compressed',
+    'application/octet-stream' // For various compressed files
   ];
 
   if (allowedTypes.includes(file.mimetype)) {
@@ -54,7 +58,7 @@ export const upload = multer({
   storage: storage,
   fileFilter: fileFilter,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB
+    fileSize: 50 * 1024 * 1024, // 50MB
     files: 5 // Max 5 files
   }
 });

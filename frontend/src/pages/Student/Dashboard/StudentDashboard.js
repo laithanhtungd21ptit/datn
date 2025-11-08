@@ -119,9 +119,10 @@ const StudentDashboard = () => {
   ]);
 
   const [quickStats, setQuickStats] = useState([
-    { title: 'Lớp học tham gia', value: 0, icon: <Class />, color: '#1976d2' },
-    { title: 'Bài tập đã nộp', value: 0, icon: <Assignment />, color: '#388e3c' },
-    { title: 'Deadline sắp tới', value: 0, icon: <AccessTime />, color: '#d32f2f' },
+  { title: 'Lớp học tham gia', value: 0, icon: <Class />, color: '#1976d2' },
+  { title: 'Bài tập đã nộp', value: 0, icon: <Assignment />, color: '#388e3c' },
+  { title: 'Bài tập chưa nộp', value: 0, icon: <Warning />, color: '#f57c00' },
+    { title: 'Bài tập chưa chấm', value: 0, icon: <Grade />, color: '#9c27b0' },
   ]);
 
   const [upcomingDeadlines, setUpcomingDeadlines] = useState([]);
@@ -145,24 +146,81 @@ const StudentDashboard = () => {
   ]);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const data = await api.studentDashboard();
+  (async () => {
+  try {
+  const data = await api.studentDashboard();
 
-        // Update upcoming deadlines
-        if (Array.isArray(data?.upcomingDeadlines)) {
-          setUpcomingDeadlines(data.upcomingDeadlines.map((d, idx) => ({
-            id: d.id || idx,
-            title: d.title,
-            class: d.class || 'Unknown Class',
-            deadline: d.dueDate,
-            daysLeft: Math.ceil((new Date(d.dueDate) - new Date()) / (1000 * 60 * 60 * 24)),
-            status: 'pending',
-            description: d.description || 'Không có mô tả',
-            attachments: [], // No attachments from API yet
-            maxGrade: 10,
-          })));
+        // Update quick stats from real data
+        if (data?.stats) {
+          setQuickStats([
+            { title: 'Lớp học tham gia', value: data.stats.enrolledClasses || 0, icon: <Class />, color: '#1976d2' },
+            { title: 'Bài tập đã nộp', value: data.stats.submittedAssignments || 0, icon: <Assignment />, color: '#388e3c' },
+            { title: 'Bài tập chưa nộp', value: (data.stats.totalAssignments || 0) - (data.stats.submittedAssignments || 0), icon: <Warning />, color: '#f57c00' },
+            { title: 'Bài tập chưa chấm', value: (data.stats.submittedAssignments || 0) - (data.stats.gradedAssignments || 0), icon: <Grade />, color: '#9c27b0' },
+          ]);
         }
+
+        // Create assignment status data for pie chart from real data
+        if (data?.stats) {
+          const submitted = data.stats.submittedAssignments || 0;
+          const graded = data.stats.gradedAssignments || 0;
+          const notSubmitted = (data.stats.totalAssignments || 0) - submitted;
+          const notGraded = submitted - graded;
+
+          setAssignmentStatusData([
+            { name: 'Đã nộp & chấm', value: graded, color: '#4caf50' },
+            { name: 'Đã nộp, chờ chấm', value: notGraded, color: '#ff9800' },
+            { name: 'Chưa nộp', value: notSubmitted, color: '#f44336' },
+          ]);
+        }
+
+        // Create grade trend data from grades history
+        if (Array.isArray(data?.grades) && data.grades.length > 0) {
+          const gradeTrend = data.grades.slice(-7).map((grade, index) => ({
+            name: `Tuần ${index + 1}`,
+            grade: grade.score || 0
+          }));
+          setGradeData(gradeTrend);
+        }
+
+        // Update upcoming deadlines (assignments)
+        let deadlines = [];
+        if (Array.isArray(data?.upcomingDeadlines)) {
+        deadlines = data.upcomingDeadlines.map((d, idx) => ({
+        id: `assignment-${d.id || idx}`,
+        title: d.title,
+        class: d.class || 'Unknown Class',
+        deadline: d.dueDate,
+        daysLeft: Math.ceil((new Date(d.dueDate) - new Date()) / (1000 * 60 * 60 * 24)),
+        status: 'pending',
+        description: d.description || 'Không có mô tả',
+        type: 'assignment',
+          attachments: [], // No attachments from API yet
+            maxGrade: 10,
+          }));
+        }
+
+        // Update upcoming exams
+        if (Array.isArray(data?.upcomingExams)) {
+          const exams = data.upcomingExams.map((exam, idx) => ({
+            id: `exam-${exam.id || idx}`,
+            title: exam.title,
+            class: exam.class || 'Unknown Class',
+            deadline: exam.startAt,
+            daysLeft: Math.ceil((new Date(exam.startAt) - new Date()) / (1000 * 60 * 60 * 24)),
+            status: 'exam',
+            description: exam.description || 'Kỳ thi',
+            type: 'exam',
+            duration: exam.duration,
+            room: exam.room,
+            maxGrade: exam.maxGrade || 10,
+          }));
+          deadlines = [...deadlines, ...exams];
+        }
+
+        // Sort by deadline
+        deadlines.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
+        setUpcomingDeadlines(deadlines);
         if (Array.isArray(data?.grades)) {
           setRecentGrades(data.grades.map((g, idx) => ({
             id: g.id || idx,
@@ -402,14 +460,27 @@ const StudentDashboard = () => {
               Deadline sắp tới
             </Typography>
             <List>
-              {upcomingDeadlines.map((deadline) => (
-                <ListItem key={deadline.id} divider button onClick={() => handleViewDeadline(deadline)}>
-                  <ListItemIcon>
-                    <Assignment color="warning" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={deadline.title}
-                    secondary={`${deadline.class} - Hạn: ${deadline.deadline}`}
+            {upcomingDeadlines.map((deadline) => (
+            <ListItem key={deadline.id} divider button onClick={() => handleViewDeadline(deadline)}>
+            <ListItemIcon>
+            {deadline.type === 'exam' ? (
+                <Schedule color="error" />
+              ) : (
+              <Assignment color="warning" />
+            )}
+            </ListItemIcon>
+            <ListItemText
+            primary={
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <Typography variant="body2">{deadline.title}</Typography>
+                  <Chip
+                      label={deadline.type === 'exam' ? 'Kỳ thi' : 'Bài tập'}
+                        size="small"
+                          color={deadline.type === 'exam' ? 'error' : 'primary'}
+                        />
+                      </Box>
+                    }
+                    secondary={`${deadline.class} - ${deadline.type === 'exam' ? 'Bắt đầu' : 'Hạn'}: ${new Date(deadline.deadline).toLocaleDateString('vi-VN')}`}
                   />
                   <Chip
                     label={`${deadline.daysLeft} ngày`}
@@ -560,49 +631,73 @@ const StudentDashboard = () => {
         fullWidth
       >
         <DialogTitle>
-          Chi tiết bài tập - {selectedDeadline?.title}
+        Chi tiết {selectedDeadline?.type === 'exam' ? 'kỳ thi' : 'bài tập'} - {selectedDeadline?.title}
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ mb: 3 }}>
-            <Typography variant="h6" gutterBottom>
-              {selectedDeadline?.title}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              {selectedDeadline?.class}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Giảng viên: {selectedDeadline?.teacher}
-            </Typography>
+        <Box sx={{ mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+        {selectedDeadline?.title}
+        </Typography>
+        <Typography variant="body2" color="text.secondary" gutterBottom>
+        {selectedDeadline?.class}
+        </Typography>
+        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+        <Chip
+            label={selectedDeadline?.type === 'exam' ? 'Kỳ thi' : 'Bài tập'}
+              color={selectedDeadline?.type === 'exam' ? 'error' : 'primary'}
+                size="small"
+              />
+            </Box>
           </Box>
 
           <Box sx={{ mb: 3 }}>
-            <Typography variant="subtitle1" gutterBottom>
-              Mô tả bài tập:
-            </Typography>
-            <Typography variant="body1" sx={{ mb: 2 }}>
-              {selectedDeadline?.description}
-            </Typography>
+          <Typography variant="subtitle1" gutterBottom>
+          {selectedDeadline?.type === 'exam' ? 'Mô tả kỳ thi:' : 'Mô tả bài tập:'}
+          </Typography>
+          <Typography variant="body1" sx={{ mb: 2 }}>
+          {selectedDeadline?.description}
+          </Typography>
           </Box>
 
           <Grid container spacing={2} sx={{ mb: 3 }}>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Hạn nộp:
+          <Grid item xs={12} sm={6}>
+          <Typography variant="subtitle2" color="text.secondary">
+          {selectedDeadline?.type === 'exam' ? 'Thời gian bắt đầu:' : 'Hạn nộp:'}
+          </Typography>
+          <Typography variant="body2">
+          {new Date(selectedDeadline?.deadline).toLocaleString('vi-VN')}
+          </Typography>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+          <Typography variant="subtitle2" color="text.secondary">
+          Còn lại:
+          </Typography>
+          <Chip
+          label={`${selectedDeadline?.daysLeft} ngày`}
+          color={getDeadlineStatusColor(selectedDeadline?.daysLeft)}
+          size="small"
+          />
+          </Grid>
+          {selectedDeadline?.type === 'exam' && selectedDeadline?.duration && (
+          <Grid item xs={12} sm={6}>
+          <Typography variant="subtitle2" color="text.secondary">
+              Thời lượng:
+            </Typography>
+          <Typography variant="body2">
+              {selectedDeadline.duration} phút
               </Typography>
-              <Typography variant="body2">
-                {selectedDeadline?.deadline}
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Còn lại:
-              </Typography>
-              <Chip
-                label={`${selectedDeadline?.daysLeft} ngày`}
-                color={getDeadlineStatusColor(selectedDeadline?.daysLeft)}
-                size="small"
-              />
-            </Grid>
+              </Grid>
+            )}
+            {selectedDeadline?.type === 'exam' && selectedDeadline?.room && (
+              <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle2" color="text.secondary">
+                  Phòng thi:
+                </Typography>
+                <Typography variant="body2">
+                  {selectedDeadline.room}
+                </Typography>
+              </Grid>
+            )}
             <Grid item xs={12} sm={6}>
               <Typography variant="subtitle2" color="text.secondary">
                 Điểm tối đa:

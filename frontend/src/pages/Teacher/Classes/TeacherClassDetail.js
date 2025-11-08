@@ -69,6 +69,15 @@ const TeacherClassDetail = () => {
     isExam: false,
     durationMinutes: 0
   });
+  const [openEditAssignmentDialog, setOpenEditAssignmentDialog] = React.useState(false);
+  const [editingAssignment, setEditingAssignment] = React.useState({
+    id: '',
+    title: '',
+    description: '',
+    dueDate: '',
+    isExam: false,
+    durationMinutes: 0
+  });
   const [openRemoveDialog, setOpenRemoveDialog] = useState(false);
   const [studentToRemove, setStudentToRemove] = useState(null);
 
@@ -95,6 +104,18 @@ const TeacherClassDetail = () => {
   const handleRemoveStudent = (student) => {
     setStudentToRemove(student);
     setOpenRemoveDialog(true);
+  };
+
+  const handleEditAssignment = (assignment) => {
+    setEditingAssignment({
+      id: assignment.id,
+      title: assignment.title,
+      description: assignment.description,
+      dueDate: assignment.deadline,
+      isExam: assignment.isExam,
+      durationMinutes: assignment.durationMinutes
+    });
+    setOpenEditAssignmentDialog(true);
   };
 
   const handleConfirmRemove = async () => {
@@ -153,6 +174,42 @@ const TeacherClassDetail = () => {
       }));
     } catch (e) {
       setError(e?.message || 'Không thể xóa tài liệu');
+    }
+  };
+
+  const handleEditAssignmentSubmit = async () => {
+    if (!editingAssignment.title || !editingAssignment.dueDate) return;
+
+    try {
+      await api.teacherUpdateAssignment(editingAssignment.id, {
+        title: editingAssignment.title,
+        description: editingAssignment.description,
+        dueDate: editingAssignment.dueDate,
+        isExam: editingAssignment.isExam,
+        durationMinutes: editingAssignment.isExam ? editingAssignment.durationMinutes : null,
+      });
+
+      // Update local state
+      setClassData(prev => ({
+        ...prev,
+        assignments: prev.assignments.map(a =>
+          a.id === editingAssignment.id
+            ? { ...a, title: editingAssignment.title, description: editingAssignment.description, deadline: editingAssignment.dueDate, isExam: editingAssignment.isExam, durationMinutes: editingAssignment.durationMinutes }
+            : a
+        )
+      }));
+
+      setOpenEditAssignmentDialog(false);
+      setEditingAssignment({
+        id: '',
+        title: '',
+        description: '',
+        dueDate: '',
+        isExam: false,
+        durationMinutes: 0
+      });
+    } catch (e) {
+      setError(e?.message || 'Không thể cập nhật bài tập');
     }
   };
 
@@ -307,20 +364,19 @@ const TeacherClassDetail = () => {
             </Button>
           </Box>
           <Grid container spacing={2}>
-            {(classData?.assignments || []).map(a => (
+            {(classData?.assignments || [])
+              .sort((a, b) => new Date(a.createdAt || a.updatedAt || 0) - new Date(b.createdAt || a.updatedAt || 0))
+              .map(a => (
               <Grid item xs={12} md={6} key={a.id}>
                 <Card>
                   <CardContent>
                     <Typography variant="subtitle1">{a.title}</Typography>
                     <Typography variant="body2" color="text.secondary">
-                      Hạn: {a.deadline} • Đã nộp: {a.submissions}
+                    Hạn: {a.deadline ? new Date(a.deadline).toLocaleDateString('vi-VN') : 'Chưa đặt'} • Đã nộp: {a.submissions || 0}
                     </Typography>
                     <Box sx={{ mt: 1, display: 'flex', gap: 1 }}>
-                      <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => {
-                        // Navigate to assignments page with edit mode
-                        navigate(`/teacher/assignments?assignmentId=${a.id}&edit=true`);
-                      }}>Sửa</Button>
-                      <Button size="small" variant="contained" startIcon={<Assignment />} onClick={() => navigate(`/teacher/assignments?assignmentId=${a.id}`)}>Xem bài nộp</Button>
+                    <Button size="small" variant="outlined" startIcon={<Edit />} onClick={() => handleEditAssignment(a)}>Sửa</Button>
+                    <Button size="small" variant="contained" startIcon={<Assignment />} onClick={() => navigate(`/teacher/assignments?assignmentId=${a.id}`)}>Xem bài nộp</Button>
                     </Box>
                   </CardContent>
                 </Card>
@@ -738,6 +794,83 @@ const TeacherClassDetail = () => {
             disabled={!newAnnouncement.title || !newAnnouncement.content}
           >
             Tạo thông báo
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Edit Assignment Dialog */}
+      <Dialog
+        open={openEditAssignmentDialog}
+        onClose={() => setOpenEditAssignmentDialog(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>Chỉnh sửa bài tập</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            margin="dense"
+            label="Tiêu đề bài tập"
+            fullWidth
+            variant="outlined"
+            value={editingAssignment.title}
+            onChange={(e) => setEditingAssignment(prev => ({ ...prev, title: e.target.value }))}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            label="Mô tả bài tập"
+            fullWidth
+            variant="outlined"
+            multiline
+            rows={4}
+            value={editingAssignment.description}
+            onChange={(e) => setEditingAssignment(prev => ({ ...prev, description: e.target.value }))}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            margin="dense"
+            label="Hạn nộp"
+            type="datetime-local"
+            fullWidth
+            variant="outlined"
+            value={editingAssignment.dueDate}
+            onChange={(e) => setEditingAssignment(prev => ({ ...prev, dueDate: e.target.value }))}
+            InputLabelProps={{
+              shrink: true,
+            }}
+            sx={{ mb: 2 }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={editingAssignment.isExam}
+                onChange={(e) => setEditingAssignment(prev => ({ ...prev, isExam: e.target.checked }))}
+              />
+            }
+            label="Đây là kỳ thi"
+            sx={{ mb: 2 }}
+          />
+          {editingAssignment.isExam && (
+            <TextField
+              margin="dense"
+              label="Thời lượng (phút)"
+              type="number"
+              fullWidth
+              variant="outlined"
+              value={editingAssignment.durationMinutes}
+              onChange={(e) => setEditingAssignment(prev => ({ ...prev, durationMinutes: parseInt(e.target.value) || 0 }))}
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEditAssignmentDialog(false)}>Hủy</Button>
+          <Button
+            variant="contained"
+            onClick={handleEditAssignmentSubmit}
+            disabled={!editingAssignment.title || !editingAssignment.dueDate}
+          >
+            Cập nhật bài tập
           </Button>
         </DialogActions>
       </Dialog>

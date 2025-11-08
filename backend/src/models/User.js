@@ -8,9 +8,11 @@ const UserSchema = new mongoose.Schema(
     passwordHash: { type: String, required: true },
     role: { type: String, enum: ['admin', 'teacher', 'student'], required: true, index: true },
     status: { type: String, enum: ['active', 'inactive'], default: 'active', index: true },
+    isLocked: { type: Boolean, default: false },
     phone: { type: String, required: true, trim: true },
     department: { type: String, default: '' },
     studentId: { type: String, default: '', index: true }, // Student ID for students (e.g., "B21DCPT001")
+    teacherId: { type: String, default: '', index: true }, // Teacher ID for teachers (e.g., "GVPTIT001")
     lastLoginAt: { type: Date, default: null },
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpiresAt: { type: Date, default: null },

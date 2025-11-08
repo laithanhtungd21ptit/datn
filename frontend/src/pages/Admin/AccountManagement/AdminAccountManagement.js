@@ -67,6 +67,10 @@ const AdminAccountManagement = () => {
     if (shouldBack) navigate(-1);
   };
 
+  // Notification dialog state
+  const [notificationDialog, setNotificationDialog] = useState({ open: false, user: null });
+  const [notificationForm, setNotificationForm] = useState({ title: '', content: '', type: 'general' });
+
   // Filters state must be declared before useEffect to avoid TDZ errors
   const [searchTerm, setSearchTerm] = useState('');
   const [roleFilter, setRoleFilter] = useState('all');
@@ -193,6 +197,35 @@ const AdminAccountManagement = () => {
       ));
     } catch (e) {
       setLoadError(e?.message || 'Không thể cập nhật trạng thái tài khoản');
+    }
+    handleMenuClose();
+  };
+
+  const handleSendNotification = (user) => {
+    setNotificationDialog({ open: true, user });
+    setNotificationForm({ title: '', content: '', type: 'general' });
+    handleMenuClose();
+  };
+
+  const handleNotificationSubmit = async () => {
+    if (!notificationForm.title.trim() || !notificationForm.content.trim()) {
+      setLoadError('Vui lòng nhập đầy đủ tiêu đề và nội dung thông báo');
+      return;
+    }
+
+    try {
+      await api.adminSendNotification({
+        recipientId: notificationDialog.user.id,
+        title: notificationForm.title.trim(),
+        content: notificationForm.content.trim(),
+        type: notificationForm.type
+      });
+
+      setNotificationDialog({ open: false, user: null });
+      setNotificationForm({ title: '', content: '', type: 'general' });
+      openResultDialog('Thành công', `Đã gửi thông báo đến ${notificationDialog.user.fullName}`, 'success');
+    } catch (error) {
+      setLoadError(error?.message || 'Không thể gửi thông báo');
     }
   };
 
@@ -593,17 +626,21 @@ const AdminAccountManagement = () => {
           Chỉnh sửa
         </MenuItem>
         <MenuItem onClick={() => handleToggleStatus(selectedUserForMenu)}>
-          {selectedUserForMenu?.status === 'active' ? (
-            <>
-              <Block sx={{ mr: 1 }} />
-              Khóa tài khoản
-            </>
-          ) : (
-            <>
-              <CheckCircle sx={{ mr: 1 }} />
-              Kích hoạt tài khoản
-            </>
-          )}
+        {selectedUserForMenu?.status === 'active' ? (
+        <>
+        <Block sx={{ mr: 1 }} />
+        Khóa tài khoản
+        </>
+        ) : (
+        <>
+        <CheckCircle sx={{ mr: 1 }} />
+        Kích hoạt tài khoản
+        </>
+        )}
+        </MenuItem>
+        <MenuItem onClick={() => handleSendNotification(selectedUserForMenu)}>
+          <Person sx={{ mr: 1 }} />
+          Gửi thông báo
         </MenuItem>
         <Divider />
         <MenuItem 
@@ -813,6 +850,65 @@ const AdminAccountManagement = () => {
         <DialogActions>
           <Button onClick={() => setOpenEditDialog(false)}>Hủy</Button>
           <Button onClick={handleEditSubmit} variant="contained">Lưu</Button>
+        </DialogActions>
+      </Dialog>
+
+          {/* Send Notification Dialog */}
+      <Dialog
+        open={notificationDialog.open}
+        onClose={() => setNotificationDialog({ open: false, user: null })}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>
+          Gửi thông báo đến {notificationDialog.user?.fullName}
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ pt: 2 }}>
+            <TextField
+              fullWidth
+              label="Tiêu đề thông báo"
+              value={notificationForm.title}
+              onChange={(e) => setNotificationForm(prev => ({ ...prev, title: e.target.value }))}
+              sx={{ mb: 2 }}
+              required
+            />
+            <TextField
+              fullWidth
+              label="Nội dung thông báo"
+              value={notificationForm.content}
+              onChange={(e) => setNotificationForm(prev => ({ ...prev, content: e.target.value }))}
+              multiline
+              rows={4}
+              sx={{ mb: 2 }}
+              required
+            />
+            <FormControl fullWidth>
+              <InputLabel>Loại thông báo</InputLabel>
+              <Select
+                value={notificationForm.type}
+                onChange={(e) => setNotificationForm(prev => ({ ...prev, type: e.target.value }))}
+                label="Loại thông báo"
+              >
+                <MenuItem value="general">Thông báo chung</MenuItem>
+                <MenuItem value="important">Quan trọng</MenuItem>
+                <MenuItem value="reminder">Nhắc nhở</MenuItem>
+                <MenuItem value="announcement">Thông báo lớp</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNotificationDialog({ open: false, user: null })}>
+            Hủy
+          </Button>
+          <Button
+            onClick={handleNotificationSubmit}
+            variant="contained"
+            disabled={!notificationForm.title.trim() || !notificationForm.content.trim()}
+          >
+            Gửi thông báo
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

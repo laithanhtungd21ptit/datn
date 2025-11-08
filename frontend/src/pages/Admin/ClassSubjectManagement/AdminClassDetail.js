@@ -63,85 +63,11 @@ const AdminClassDetail = () => {
       setLoading(true);
       setError('');
       try {
-        // Mock data - trong thực tế sẽ gọi API
-        const mockClassData = {
-          id: id,
-          name: 'Lập trình Web - Nhóm 1',
-          code: 'WEB001',
-          subject: 'Lập trình Web',
-          teacherId: 'teacher001',
-          department: 'CNTT',
-          semester: '2024.1',
-          schedule: 'Thứ 2, 4, 6 - 7:00-9:00',
-          room: 'A101',
-          totalStudents: 35,
-          status: 'active',
-          createdAt: '2024-01-15',
-          description: 'Khóa học lập trình web cơ bản sử dụng HTML, CSS, JavaScript và ReactJS'
-        };
-
-        const mockTeacher = {
-          id: 'teacher001',
-          username: 'teacher',
-          fullName: 'Nguyễn Văn Giảng',
-          email: 'teacher@example.com',
-          phone: '0123456789',
-          department: 'CNTT',
-          role: 'teacher',
-          status: 'active'
-        };
-
-        const mockStudents = [
-          {
-            id: 1,
-            username: 'student001',
-            fullName: 'Nguyễn Văn A',
-            email: 'student001@example.com',
-            phone: '0123456781',
-            studentId: 'IT001',
-            status: 'active',
-            enrollmentDate: '2024-01-15',
-            assignmentsCompleted: 8,
-            assignmentsTotal: 10
-          },
-          {
-            id: 2,
-            username: 'student002',
-            fullName: 'Trần Thị B',
-            email: 'student002@example.com',
-            phone: '0123456782',
-            studentId: 'IT002',
-            status: 'active',
-            enrollmentDate: '2024-01-15',
-            assignmentsCompleted: 6,
-            assignmentsTotal: 10
-          },
-          {
-            id: 3,
-            username: 'student003',
-            fullName: 'Lê Văn C',
-            email: 'student003@example.com',
-            phone: '0123456783',
-            studentId: 'IT003',
-            status: 'inactive',
-            enrollmentDate: '2024-01-15',
-            assignmentsCompleted: 3,
-            assignmentsTotal: 10
-          },
-          // Thêm more students...
-        ];
-
-        setClassData(mockClassData);
-        setTeacher(mockTeacher);
-        setStudents(mockStudents);
-
-        // Trong thực tế:
-        // const classData = await api.adminClassDetail(id);
-        // const teacher = await api.getTeacher(classData.teacherId);
-        // const students = await api.getClassStudents(id);
-        // setClassData(classData);
-        // setTeacher(teacher);
-        // setStudents(students);
+        // Call real API to get class details
+        const classData = await api.adminGetClassDetail(id);
+        setClassData(classData);
+        setTeacher(classData.teacher);
+        setStudents(classData.students || []);
 
       } catch (e) {
         setError(e?.message || 'Không thể tải thông tin lớp học');
@@ -160,7 +86,7 @@ const AdminClassDetail = () => {
   };
 
   const getStatusLabel = (status) => {
-    return status === 'active' ? 'Hoạt động' : 'Không hoạt động';
+  return 'Đang hoạt động'; // All classes are active by default
   };
 
   const handleRemoveStudent = (student) => {
@@ -249,7 +175,7 @@ const AdminClassDetail = () => {
             textOverflow: 'ellipsis'
           }}
         >
-          {classData.code} - {classData.subject}
+          {classData.code} - {classData.department}
         </Typography>
         <Box sx={{ 
           display: 'flex', 
@@ -303,7 +229,7 @@ const AdminClassDetail = () => {
                 color="success.main"
                 sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}
               >
-                {students.filter(s => s.status === 'active').length}
+                {students.length}
               </Typography>
               <Typography 
                 variant="body2" 
@@ -498,9 +424,9 @@ const AdminClassDetail = () => {
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
                   <Chip
-                    label={getStatusLabel(teacher.status)}
-                    color={getStatusColor(teacher.status)}
-                    size="small"
+                  label="Đang hoạt động"
+                  color="success"
+                  size="small"
                   />
                   <Chip
                     label={teacher.department}
@@ -593,22 +519,22 @@ const AdminClassDetail = () => {
                         />
                       </TableCell>
                       <TableCell>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Typography variant="body2">
-                            {student.assignmentsCompleted}/{student.assignmentsTotal}
-                          </Typography>
-                          <Chip
-                            label={`${Math.round((student.assignmentsCompleted / student.assignmentsTotal) * 100)}%`}
-                            color={
-                              student.assignmentsCompleted / student.assignmentsTotal >= 0.8 
-                                ? 'success' 
-                                : student.assignmentsCompleted / student.assignmentsTotal >= 0.5 
-                                ? 'warning' 
-                                : 'error'
-                            }
-                            size="small"
-                          />
-                        </Box>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Typography variant="body2">
+                      {student.assignmentsCompleted || 0}/{student.assignmentsTotal || 0} bài
+                      </Typography>
+                      <Chip
+                      label={`${student.completionRate || '0%'}`}
+                      color={
+                      (parseInt((student.completionRate || '0%').replace('%', '')) / 100) >= 0.8
+                      ? 'success'
+                      : (parseInt((student.completionRate || '0%').replace('%', '')) / 100) >= 0.5
+                      ? 'warning'
+                      : 'error'
+                      }
+                      size="small"
+                      />
+                      </Box>
                       </TableCell>
                       <TableCell>
                         {new Date(student.enrollmentDate).toLocaleDateString('vi-VN')}

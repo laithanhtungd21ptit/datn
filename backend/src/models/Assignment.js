@@ -8,11 +8,17 @@ const AssignmentSchema = new mongoose.Schema(
     dueDate: { type: Date, required: true },
     isExam: { type: Boolean, default: false },
     durationMinutes: { type: Number, default: null },
+    // Exam-specific fields
+    startTime: { type: Date, default: null }, // When the exam starts
+    endTime: { type: Date, default: null },   // When the exam ends (calculated from startTime + duration)
   },
   { timestamps: true }
 );
 
+// Indexes for efficient queries
 AssignmentSchema.index({ classId: 1, dueDate: -1 });
+AssignmentSchema.index({ isExam: 1, startTime: -1 }); // For exam monitoring
+AssignmentSchema.index({ createdAt: -1 }); // For sorting by creation time
 
 export const AssignmentModel = mongoose.models.Assignment || mongoose.model('Assignment', AssignmentSchema);
 

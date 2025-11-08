@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import ChatPopup from '../Chat/ChatPopup';
 import {
   Box,
   Drawer,
@@ -22,6 +23,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Badge,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -33,7 +35,10 @@ import {
   Person,
   Logout,
   Notifications,
+  DoneAll,
+  Description,
 } from '@mui/icons-material';
+import { api } from '../../api/client';
 
 const drawerWidth = 240;
 
@@ -43,6 +48,7 @@ const Layout = () => {
   const [notifAnchorEl, setNotifAnchorEl] = useState(null);
   const [openNotificationDialog, setOpenNotificationDialog] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState(null);
+  const [notificationsData, setNotificationsData] = useState([]);
   const navigate = useNavigate();
   const { logout } = useAuth();
   const location = useLocation();
@@ -56,8 +62,20 @@ const Layout = () => {
   const displayName = currentUser?.fullName || (isTeacher ? 'Giảng viên Demo' : isStudent ? 'Sinh viên Demo' : 'Admin Demo');
   const userCode = currentUser?.username || '';
 
-  // Notifications - currently no API, so empty
-  const notificationsData = [];
+  // Fetch notifications for students
+  useEffect(() => {
+    if (isStudent && currentUser) {
+      const fetchNotifications = async () => {
+        try {
+          const notifications = await api.studentNotifications();
+          setNotificationsData(notifications);
+        } catch (error) {
+          console.error('Failed to fetch notifications:', error);
+        }
+      };
+      fetchNotifications();
+    }
+  }, [isStudent, currentUser]);
 
   const teacherMenuItems = [
     { text: 'Trang chủ', icon: <Dashboard />, path: '/teacher' },
@@ -101,9 +119,37 @@ const Layout = () => {
     setNotifAnchorEl(null);
   };
 
-  const handleViewNotification = (notification) => {
+  const handleViewNotification = async (notification) => {
     setSelectedNotification(notification);
     setOpenNotificationDialog(true);
+    setNotifAnchorEl(null);
+
+    // Mark as read if not already read
+    if (isStudent && !notification.isRead) {
+      try {
+        await api.studentMarkNotificationRead(notification.id);
+        // Update local state
+        setNotificationsData(prev =>
+          prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n)
+        );
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+      }
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    if (isStudent && notificationsData.length > 0) {
+      try {
+        await api.studentMarkAllNotificationsRead();
+        // Update local state
+        setNotificationsData(prev =>
+          prev.map(n => ({ ...n, isRead: true }))
+        );
+      } catch (error) {
+        console.error('Failed to mark all notifications as read:', error);
+      }
+    }
     setNotifAnchorEl(null);
   };
 
@@ -199,9 +245,13 @@ const Layout = () => {
           >
             Hệ thống Quản lý Bài tập
           </Typography>
+          {isStudent && (
           <IconButton color="inherit" onClick={handleNotifClick} aria-haspopup="true" aria-controls="menu-notifications" aria-label="notifications">
-            <Notifications />
-          </IconButton>
+              <Badge badgeContent={notificationsData.filter(n => !n.isRead).length} color="error">
+                <Notifications />
+              </Badge>
+            </IconButton>
+          )}
           <IconButton
             size="large"
             aria-label="account of current user"
@@ -240,31 +290,70 @@ const Layout = () => {
       </AppBar>
       {/* Notifications Menu */}
       <Menu
-        id="menu-notifications"
-        anchorEl={notifAnchorEl}
-        open={Boolean(notifAnchorEl)}
-        onClose={handleNotifClose}
-        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
-        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      id="menu-notifications"
+      anchorEl={notifAnchorEl}
+      open={Boolean(notifAnchorEl)}
+      onClose={handleNotifClose}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+        PaperProps={{
+        sx: { maxWidth: 400, maxHeight: 500 }
+      }}
       >
-        <MenuItem disabled>
-          <Typography variant="subtitle2">Thông báo</Typography>
-        </MenuItem>
-        {notificationsData.length === 0 ? (
-          <MenuItem onClick={handleNotifClose}>Không có thông báo mới</MenuItem>
-        ) : (
-          notificationsData.map((n) => (
-            <MenuItem key={n.id} onClick={() => handleViewNotification(n)} sx={{ maxWidth: 320, whiteSpace: 'normal' }}>
-              <ListItemIcon>
-                {n.type === 'assignment' && <Assignment color="primary" />}
-                {n.type === 'class' && <Class color="info" />}
-                {n.type === 'exam' && <Monitor color="warning" />}
-                {n.type === 'grade' && <Person color="success" />}
-              </ListItemIcon>
-              <ListItemText
-                primary={n.title}
-                secondary={n.time}
-              />
+      <Box sx={{ p: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <Typography variant="subtitle2">Thông báo</Typography>
+      {notificationsData.length > 0 && notificationsData.some(n => !n.isRead) && (
+      <Button
+      size="small"
+      startIcon={<DoneAll />}
+      onClick={handleMarkAllRead}
+      sx={{ fontSize: '0.75rem' }}
+      >
+      Đánh dấu tất cả đã đọc
+      </Button>
+      )}
+      </Box>
+      <Divider />
+      {notificationsData.length === 0 ? (
+      <MenuItem onClick={handleNotifClose}>Không có thông báo mới</MenuItem>
+      ) : (
+        notificationsData.map((n) => (
+        <MenuItem
+        key={n.id}
+        onClick={() => handleViewNotification(n)}
+        sx={{
+        maxWidth: 400,
+        whiteSpace: 'normal',
+        backgroundColor: n.isRead ? 'transparent' : 'action.hover',
+        '&:hover': {
+        backgroundColor: n.isRead ? 'action.hover' : 'action.selected'
+        }
+        }}
+        >
+        <ListItemIcon>
+        {n.type === 'announcement_created' && <Notifications color={n.isRead ? "disabled" : "primary"} />}
+        {n.type === 'assignment_created' && <Assignment color={n.isRead ? "disabled" : "warning"} />}
+          {n.type === 'assignment_graded' && <Assignment color={n.isRead ? "disabled" : "success"} />}
+          {n.type === 'document_uploaded' && <Description color={n.isRead ? "disabled" : "info"} />}
+        </ListItemIcon>
+        <ListItemText
+        primary={
+        <Typography
+        variant="body2"
+        sx={{
+          fontWeight: n.isRead ? 'normal' : 'bold',
+            textTransform: 'none' // Chuyển từ in hoa sang thường
+        }}
+        >
+            {n.title}
+          </Typography>
+        }
+        secondary={
+        <Typography variant="caption" color="text.secondary">
+            {n.time}
+            </Typography>
+            }
+            />
             </MenuItem>
           ))
         )}
@@ -314,39 +403,41 @@ const Layout = () => {
 
       {/* Notification Detail Dialog */}
       <Dialog
-        open={openNotificationDialog}
-        onClose={() => setOpenNotificationDialog(false)}
-        maxWidth="sm"
-        fullWidth
+      open={openNotificationDialog}
+      onClose={() => setOpenNotificationDialog(false)}
+      maxWidth="sm"
+      fullWidth
       >
-        <DialogTitle>
-          {selectedNotification?.title}
-        </DialogTitle>
-        <DialogContent>
-          <Box sx={{ mb: 2 }}>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Người gửi: {selectedNotification?.sender}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Lớp: {selectedNotification?.class}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Thời gian: {selectedNotification?.time}
-            </Typography>
-          </Box>
-          
-          <Divider sx={{ mb: 2 }} />
-          
-          <Typography variant="body1">
-            {selectedNotification?.content}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenNotificationDialog(false)}>
-            Đóng
-          </Button>
-        </DialogActions>
+      <DialogTitle sx={{ textTransform: 'none' }}>
+      {selectedNotification?.title}
+      </DialogTitle>
+      <DialogContent>
+      <Box sx={{ mb: 2 }}>
+      <Typography variant="body2" color="text.secondary" gutterBottom>
+      Người gửi: {selectedNotification?.sender}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" gutterBottom>
+      Lớp: {selectedNotification?.class}
+      </Typography>
+      <Typography variant="body2" color="text.secondary" gutterBottom>
+      Thời gian: {selectedNotification?.time}
+      </Typography>
+      </Box>
+
+      <Divider sx={{ mb: 2 }} />
+
+      <Typography variant="body1" sx={{ whiteSpace: 'pre-wrap' }}>
+      {selectedNotification?.content}
+      </Typography>
+      </DialogContent>
+      <DialogActions>
+      <Button onClick={() => setOpenNotificationDialog(false)}>
+      Đóng
+      </Button>
+      </DialogActions>
       </Dialog>
+      {/* Chat Popup */}
+      <ChatPopup />
     </Box>
   );
 };

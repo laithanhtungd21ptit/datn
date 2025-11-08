@@ -39,14 +39,14 @@ const StudentClasses = () => {
   const [openJoinDialog, setOpenJoinDialog] = useState(false);
   const [joinCode, setJoinCode] = useState('');
   useEffect(() => {
-    (async () => {
-      setLoading(true); setError('');
-      try {
-        const items = await api.studentClasses();
-        setClasses(items.map(c => ({ id: c.id, name: c.name, code: c.code, teacher: '', description: '', students: 0, assignments: 0, documents: 0, announcements: 0 })));
-      } catch(e) { setError(e?.message || 'Không thể tải lớp học'); }
-      finally { setLoading(false); }
-    })();
+  (async () => {
+  setLoading(true); setError('');
+  try {
+  const items = await api.studentClasses();
+  setClasses(items);
+  } catch(e) { setError(e?.message || 'Không thể tải lớp học'); }
+  finally { setLoading(false); }
+  })();
   }, []);
 
 
@@ -57,14 +57,14 @@ const StudentClasses = () => {
   };
 
   const handleJoinSubmit = async () => {
-    if (!joinCode.trim()) return;
-    try {
-      await api.studentJoinClass(joinCode.trim());
-      const items = await api.studentClasses();
-      setClasses(items.map(c => ({ id: c.id, name: c.name, code: c.code, teacher: '', description: '', students: 0, assignments: 0, documents: 0, announcements: 0 })));
-    } catch {}
-    setOpenJoinDialog(false);
-    setJoinCode('');
+  if (!joinCode.trim()) return;
+  try {
+  await api.studentJoinClass(joinCode.trim());
+  const items = await api.studentClasses();
+  setClasses(items);
+  } catch {}
+  setOpenJoinDialog(false);
+  setJoinCode('');
   };
 
 

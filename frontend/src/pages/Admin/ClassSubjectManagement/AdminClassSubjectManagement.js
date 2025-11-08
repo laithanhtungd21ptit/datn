@@ -135,6 +135,7 @@ const AdminClassSubjectManagement = () => {
   };
 
   const handleEditItem = (item, type) => {
+    console.log('Opening edit dialog for item:', item);
     setSelectedItem(item);
     setNewClass({ name: item.name, code: item.code, teacherId: item.teacherId, department: item.department });
     setOpenEditDialog(true);
@@ -169,6 +170,41 @@ const AdminClassSubjectManagement = () => {
     }
     setOpenClassDialog(false);
     setNewClass({ name: '', code: '', subject: '', teacher: '', teacherId: '', department: 'CNTT' });
+  };
+
+  const handleEditClassSubmit = async () => {
+    if (!newClass.name || !newClass.code || !newClass.teacherId) return;
+    try {
+      console.log('Updating class:', selectedItem.id, newClass);
+      await api.adminUpdateClass(selectedItem.id, {
+        name: newClass.name,
+        code: newClass.code,
+        teacherId: newClass.teacherId,
+        department: newClass.department
+      });
+
+      // Refresh classes list
+      const items = await api.adminClasses();
+      const teacherMap = teachers.reduce((acc, t) => {
+        acc[t.id] = t.name;
+        return acc;
+      }, {});
+      setClasses(items.map(c => ({
+        id: c.id,
+        name: c.name,
+        code: c.code,
+        teacherId: c.teacherId,
+        teacherName: teacherMap[c.teacherId] || 'Unknown',
+        department: c.department
+      })));
+
+      setOpenEditDialog(false);
+      setNewClass({ name: '', code: '', subject: '', teacher: '', teacherId: '', department: 'CNTT' });
+      console.log('Class updated successfully');
+    } catch (e) {
+      console.error('Error updating class:', e);
+      setError(e?.message || 'Không thể cập nhật lớp học');
+    }
   };
 
   const handleDeleteConfirm = async () => {
@@ -362,6 +398,62 @@ const AdminClassSubjectManagement = () => {
         <DialogActions>
           <Button onClick={() => setOpenClassDialog(false)}>Hủy</Button>
           <Button onClick={handleCreateClassSubmit} variant="contained" disabled={!newClass.name || !newClass.code || !newClass.teacherId}>Tạo lớp học</Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog open={openEditDialog} onClose={() => setOpenEditDialog(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Chỉnh sửa lớp học</DialogTitle>
+        <DialogContent>
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Tên lớp học"
+                value={newClass.name}
+                onChange={(e) => setNewClass(prev => ({ ...prev, name: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Mã lớp học"
+                value={newClass.code}
+                onChange={(e) => setNewClass(prev => ({ ...prev, code: e.target.value }))}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <FormControl fullWidth>
+                <InputLabel>Giảng viên</InputLabel>
+                <Select
+                  value={newClass.teacherId}
+                  onChange={(e) => setNewClass(prev => ({ ...prev, teacherId: e.target.value }))}
+                  label="Giảng viên"
+                >
+                  {teachers.map((teacher) => (
+                    <MenuItem key={teacher.id} value={teacher.id}>{teacher.name}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Khoa/Bộ môn"
+                value={newClass.department}
+                onChange={(e) => setNewClass(prev => ({ ...prev, department: e.target.value }))}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenEditDialog(false)}>Hủy</Button>
+          <Button
+            onClick={handleEditClassSubmit}
+            variant="contained"
+            disabled={!newClass.name || !newClass.code || !newClass.teacherId}
+          >
+            Cập nhật
+          </Button>
         </DialogActions>
       </Dialog>
 

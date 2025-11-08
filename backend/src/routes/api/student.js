@@ -9,6 +9,7 @@ import { SubmissionModel } from '../../models/Submission.js';
 import { DocumentModel } from '../../models/Document.js';
 import { AnnouncementModel } from '../../models/Announcement.js';
 import { CommentModel } from '../../models/Comment.js';
+import { logUserActivity } from '../../utils/logger.js';
 
 export const studentRouter = Router();
 
@@ -156,7 +157,49 @@ studentRouter.get('/classes', async (req, res) => {
   const studentId = req.user.id;
   const classIds = await EnrollmentModel.find({ studentId, status: 'enrolled' }).distinct('classId');
   const classes = await ClassModel.find({ _id: { $in: classIds } }).lean();
-  res.json(classes.map(c => ({ id: String(c._id), name: c.name, code: c.code, department: c.department })));
+
+  // Get teacher names
+  const teacherIds = classes.map(c => c.teacherId);
+  const teachers = await UserModel.find({ _id: { $in: teacherIds } }, 'fullName').lean();
+  const teacherMap = new Map(teachers.map(t => [String(t._id), t.fullName]));
+
+  // Get counts for each class
+  const [assignmentCounts, studentCounts, documentCounts, announcementCounts] = await Promise.all([
+    AssignmentModel.aggregate([
+      { $match: { classId: { $in: classIds } } },
+      { $group: { _id: '$classId', count: { $sum: 1 } } },
+    ]),
+    EnrollmentModel.aggregate([
+      { $match: { classId: { $in: classIds }, status: 'enrolled' } },
+      { $group: { _id: '$classId', count: { $sum: 1 } } },
+    ]),
+    DocumentModel.aggregate([
+      { $match: { classId: { $in: classIds } } },
+      { $group: { _id: '$classId', count: { $sum: 1 } } },
+    ]),
+    AnnouncementModel.aggregate([
+      { $match: { classId: { $in: classIds } } },
+      { $group: { _id: '$classId', count: { $sum: 1 } } },
+    ]),
+  ]);
+
+  const assignmentMap = new Map(assignmentCounts.map(x => [String(x._id), x.count]));
+  const studentMap = new Map(studentCounts.map(x => [String(x._id), x.count]));
+  const documentMap = new Map(documentCounts.map(x => [String(x._id), x.count]));
+  const announcementMap = new Map(announcementCounts.map(x => [String(x._id), x.count]));
+
+  res.json(classes.map(c => ({
+    id: String(c._id),
+    name: c.name,
+    code: c.code,
+    department: c.department,
+    description: c.description || '',
+    teacher: teacherMap.get(String(c.teacherId)) || 'Unknown',
+    students: studentMap.get(String(c._id)) || 0,
+    assignments: assignmentMap.get(String(c._id)) || 0,
+    documents: documentMap.get(String(c._id)) || 0,
+    announcements: announcementMap.get(String(c._id)) || 0,
+  })));
 });
 
 studentRouter.get('/classes/:id', async (req, res) => {
@@ -208,7 +251,7 @@ studentRouter.get('/classes/:id', async (req, res) => {
 studentRouter.get('/assignments', async (req, res) => {
   const studentId = req.user.id;
   const classIds = await EnrollmentModel.find({ studentId, status: 'enrolled' }).distinct('classId');
-  const assignments = await AssignmentModel.find({ classId: { $in: classIds } }).sort({ dueDate: 1 }).lean();
+  const assignments = await AssignmentModel.find({ classId: { $in: classIds } }).sort({ createdAt: -1 }).lean();
 
   // Get submissions for all assignments
   const assignmentIds = assignments.map(a => a._id);
@@ -238,14 +281,16 @@ studentRouter.get('/assignments', async (req, res) => {
     const hasGrade = submission && submission.score != null;
 
     return {
-      id: String(a._id),
-      title: a.title,
-      description: a.description || '',
-      class: classInfo ? classInfo.name : '',
-      teacher: '', // Will be populated if needed
-      isExam: !!a.isExam,
-      durationMinutes: a.durationMinutes || null,
+    id: String(a._id),
+    title: a.title,
+    description: a.description || '',
+    class: classInfo ? classInfo.name : '',
+    classId: String(a.classId),
+    teacher: '', // Will be populated if needed
+    isExam: !!a.isExam,
+    durationMinutes: a.durationMinutes || null,
       dueDate: a.dueDate,
+      createdAt: a.createdAt,
       mySubmission: hasSubmission ? {
         status: 'submitted',
         submittedAt: submission.submittedAt,
@@ -286,6 +331,23 @@ studentRouter.post('/classes/join', async (req, res) => {
   const cls = await ClassModel.findOne({ code }).lean();
   if (!cls) return res.status(404).json({ error: 'CLASS_NOT_FOUND' });
   await EnrollmentModel.updateOne({ classId: cls._id, studentId }, { $set: { status: 'enrolled' } }, { upsert: true });
+
+  // Log join class activity
+  try {
+    await logUserActivity(
+      studentId,
+      'student',
+      'join_class',
+      cls._id,
+      'class',
+      `Joined class: ${cls.name} (${cls.code})`,
+      { classCode: code },
+      req
+    );
+  } catch (error) {
+    console.error('Failed to log join class activity:', error);
+  }
+
   res.json({ success: true, classId: String(cls._id) });
 });
 
@@ -313,6 +375,23 @@ studentRouter.post('/submissions', upload.array('files', 5), async (req, res) =>
     },
     { upsert: true, new: true }
   );
+
+  // Log submit assignment activity
+  try {
+    const assignment = await AssignmentModel.findById(assignmentId).lean();
+    await logUserActivity(
+      studentId,
+      'student',
+      'submit_assignment',
+      assignmentId,
+      'assignment',
+      `Submitted assignment: ${assignment?.title || 'Unknown'}`,
+      { filesCount: fileUrls.length, notes },
+      req
+    );
+  } catch (error) {
+    console.error('Failed to log submit assignment activity:', error);
+  }
 
   res.status(201).json({ id: String(submission._id) });
 });
@@ -430,6 +509,222 @@ studentRouter.post('/classes/:id/comments', async (req, res) => {
     time: 'Vừa xong',
     createdAt: comment.createdAt
   });
+});
+
+// Get notifications for header
+studentRouter.get('/notifications', async (req, res) => {
+  const studentId = req.user.id;
+
+  const { NotificationModel } = await import('../../models/Notification.js');
+
+  // Get recent notifications (limit to 20)
+  const notifications = await NotificationModel.find({
+    recipientId: studentId
+  })
+  .sort({ createdAt: -1 })
+  .limit(20)
+  .populate('senderId', 'fullName')
+  .populate('classId', 'name')
+  .lean();
+
+  // Format notifications for frontend
+  const formattedNotifications = notifications.map(notification => ({
+    id: notification._id.toString(),
+    type: notification.type,
+    title: notification.title,
+    content: notification.content,
+    time: new Date(notification.createdAt).toLocaleString('vi-VN'),
+    class: notification.classId?.name || 'Unknown Class',
+    sender: notification.senderId?.fullName || 'Giảng viên',
+    isRead: notification.isRead
+  }));
+
+  res.json(formattedNotifications);
+});
+
+// Mark notification as read
+studentRouter.post('/notifications/:id/read', async (req, res) => {
+  const { id } = req.params;
+  const studentId = req.user.id;
+
+  const { NotificationModel } = await import('../../models/Notification.js');
+
+  try {
+    await NotificationModel.findOneAndUpdate(
+      { _id: id, recipientId: studentId },
+      { isRead: true }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+// Mark all notifications as read
+studentRouter.post('/notifications/mark-all-read', async (req, res) => {
+  const studentId = req.user.id;
+
+  const { NotificationModel } = await import('../../models/Notification.js');
+
+  try {
+    await NotificationModel.updateMany(
+      { recipientId: studentId, isRead: false },
+      { isRead: true }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    res.status(500).json({ error: 'Failed to mark all notifications as read' });
+  }
+});
+
+// ---- Chat System ----
+
+// Get available chat contacts for student
+studentRouter.get('/chat/contacts', async (req, res) => {
+  const studentId = req.user.id;
+
+  try {
+    // Get enrolled classes
+    const enrollments = await EnrollmentModel.find({ studentId, status: 'enrolled' }).lean();
+    const classIds = enrollments.map(e => e.classId);
+
+    // Get classmates (other students in same classes)
+    const classmateEnrollments = await EnrollmentModel.find({
+      classId: { $in: classIds },
+      studentId: { $ne: studentId },
+      status: 'enrolled'
+    }).distinct('studentId');
+
+    const classmates = await UserModel.find({
+      _id: { $in: classmateEnrollments },
+      role: 'student'
+    }).select('fullName username studentId').lean();
+
+    // Get teachers of enrolled classes
+    const classes = await ClassModel.find({ _id: { $in: classIds } }).lean();
+    const teacherIds = classes.map(cls => cls.teacherId);
+
+    const teachers = await UserModel.find({
+      _id: { $in: teacherIds },
+      role: 'teacher'
+    }).select('fullName username teacherId').lean();
+
+    // Get admins
+    const admins = await UserModel.find({ role: 'admin' })
+      .select('fullName username')
+      .lean();
+
+    res.json({
+      classmates: classmates.map(c => ({ id: c._id.toString(), name: c.fullName, username: c.username, studentId: c.studentId, role: 'student' })),
+      teachers: teachers.map(t => ({ id: t._id.toString(), name: t.fullName, username: t.username, teacherId: t.teacherId, role: 'teacher' })),
+      admins: admins.map(a => ({ id: a._id.toString(), name: a.fullName, username: a.username, role: 'admin' }))
+    });
+  } catch (error) {
+    console.error('Error getting chat contacts:', error);
+    res.status(500).json({ error: 'Failed to get chat contacts' });
+  }
+});
+
+// Get chat messages between student and another user
+studentRouter.get('/chat/messages/:userId', async (req, res) => {
+  const studentId = req.user.id;
+  const { userId } = req.params;
+
+  const { MessageModel } = await import('../../models/Message.js');
+
+  try {
+    const messages = await MessageModel.find({
+      $or: [
+        { senderId: studentId, receiverId: userId },
+        { senderId: userId, receiverId: studentId }
+      ]
+    })
+    .populate('senderId', 'fullName username role studentId teacherId')
+    .populate('receiverId', 'fullName username role studentId teacherId')
+    .sort({ createdAt: 1 })
+    .limit(100)
+    .lean();
+
+    res.json(messages);
+  } catch (error) {
+    console.error('Error getting chat messages:', error);
+    res.status(500).json({ error: 'Failed to get chat messages' });
+  }
+});
+
+// Send message from student
+studentRouter.post('/chat/messages', async (req, res) => {
+  const studentId = req.user.id;
+  const { receiverId, content } = req.body;
+
+  if (!receiverId || !content || !content.trim()) {
+    return res.status(400).json({ error: 'MISSING_FIELDS' });
+  }
+
+  const { MessageModel } = await import('../../models/Message.js');
+
+  try {
+    // Validate receiver exists and student can chat with them
+    const receiver = await UserModel.findById(receiverId).lean();
+    if (!receiver) {
+      return res.status(404).json({ error: 'RECEIVER_NOT_FOUND' });
+    }
+
+    // Check if student can chat with this receiver
+    let canChat = false;
+
+    if (receiver.role === 'admin') {
+      canChat = true; // Students can always chat with admin
+    } else if (receiver.role === 'teacher') {
+      // Check if teacher teaches any class the student is enrolled in
+      const enrollments = await EnrollmentModel.find({ studentId, status: 'enrolled' }).distinct('classId');
+      const teacherClasses = await ClassModel.find({ teacherId: receiverId, _id: { $in: enrollments } }).countDocuments();
+      canChat = teacherClasses > 0;
+    } else if (receiver.role === 'student') {
+      // Check if they are classmates
+      const studentEnrollments = await EnrollmentModel.find({ studentId, status: 'enrolled' }).distinct('classId');
+      const receiverEnrollments = await EnrollmentModel.find({ studentId: receiverId, status: 'enrolled' }).distinct('classId');
+      const commonClasses = studentEnrollments.filter(clsId => receiverEnrollments.includes(clsId.toString()));
+      canChat = commonClasses.length > 0;
+    }
+
+    if (!canChat) {
+      return res.status(403).json({ error: 'CANNOT_CHAT_WITH_USER' });
+    }
+
+    const message = await MessageModel.create({
+      senderId: studentId,
+      receiverId,
+      content: content.trim(),
+      messageType: 'text'
+    });
+
+    res.status(201).json({ id: message._id.toString() });
+  } catch (error) {
+    console.error('Error sending message:', error);
+    res.status(500).json({ error: 'Failed to send message' });
+  }
+});
+
+// Mark messages as read
+studentRouter.post('/chat/messages/:userId/read', async (req, res) => {
+  const studentId = req.user.id;
+  const { userId } = req.params;
+
+  const { MessageModel } = await import('../../models/Message.js');
+
+  try {
+    await MessageModel.updateMany(
+      { senderId: userId, receiverId: studentId, isRead: false },
+      { isRead: true }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking messages as read:', error);
+    res.status(500).json({ error: 'Failed to mark messages as read' });
+  }
 });
 
 

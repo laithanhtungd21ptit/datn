@@ -88,8 +88,14 @@ const TeacherClasses = () => {
     setSelectedClassForMenu(null);
   };
 
-  const handleViewStudents = (classItem) => {
+  const handleViewStudents = async (classItem) => {
     setSelectedClass(classItem);
+    try {
+      const classDetail = await api.teacherClassDetail(classItem.id);
+      setSelectedClass({ ...classItem, students: classDetail.students });
+    } catch (e) {
+      console.error('Error loading students:', e);
+    }
     setOpenStudentsDialog(true);
     handleMenuClose();
   };
@@ -143,8 +149,23 @@ const TeacherClasses = () => {
     setNotificationText('');
   };
 
+  const [createForm, setCreateForm] = useState({ name: '', code: '', description: '' });
+
   const handleCreateClass = () => {
     setOpenDialog(true);
+  };
+
+  const handleCreateSubmit = async () => {
+    if (!createForm.name || !createForm.code) return;
+    try {
+      await api.teacherCreateClass(createForm);
+      const list = await api.teacherClasses();
+      setClasses(list.map(c => ({ id: c.id, name: c.name, code: c.code, description: c.department || '', students: c.students ?? 0, assignments: c.assignments ?? 0 })));
+      setOpenDialog(false);
+      setCreateForm({ name: '', code: '', description: '' });
+    } catch (e) {
+      console.error('Error creating class:', e);
+    }
   };
 
   const handleViewDetail = (classItem) => {
@@ -284,25 +305,25 @@ const TeacherClasses = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {students.map((student) => (
-                  <TableRow key={student.id}>
-                    <TableCell>{student.studentId}</TableCell>
-                    <TableCell>{student.name}</TableCell>
-                    <TableCell>{student.email}</TableCell>
-                    <TableCell>
-                      <Chip
-                        label={student.status === 'active' ? 'Hoạt động' : 'Không hoạt động'}
-                        color={student.status === 'active' ? 'success' : 'default'}
-                        size="small"
-                      />
-                    </TableCell>
-                    <TableCell>
-                      <Button size="small" startIcon={<Edit />}>
-                        Chỉnh sửa
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
+              {(selectedClass?.students || []).map((student) => (
+              <TableRow key={student.id}>
+              <TableCell>{student.studentId}</TableCell>
+              <TableCell>{student.fullName}</TableCell>
+              <TableCell>{student.email}</TableCell>
+              <TableCell>
+              <Chip
+              label={student.status === 'active' ? 'Hoạt động' : student.status === 'locked' ? 'Đã khóa' : 'Không hoạt động'}
+              color={student.status === 'active' ? 'success' : student.status === 'locked' ? 'error' : 'default'}
+              size="small"
+              />
+              </TableCell>
+              <TableCell>
+              <Button size="small" startIcon={<Edit />}>
+              Chỉnh sửa
+              </Button>
+              </TableCell>
+              </TableRow>
+              ))}
               </TableBody>
             </Table>
           </TableContainer>
@@ -407,41 +428,41 @@ const TeacherClasses = () => {
       >
         <DialogTitle>Tạo lớp học mới</DialogTitle>
         <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Tên lớp học"
-            fullWidth
-            variant="outlined"
-          />
-          <TextField
-            margin="dense"
-            label="Mã lớp học"
-            fullWidth
-            variant="outlined"
-          />
-          <TextField
-            margin="dense"
-            label="Mô tả"
-            fullWidth
-            multiline
-            rows={3}
-            variant="outlined"
-          />
-          <TextField
-            margin="dense"
-            label="Phòng học"
-            fullWidth
-            variant="outlined"
-          />
+        <TextField
+        autoFocus
+        margin="dense"
+        label="Tên lớp học"
+        fullWidth
+        variant="outlined"
+          value={createForm.name}
+          onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
+        />
+        <TextField
+        margin="dense"
+        label="Mã lớp học"
+          fullWidth
+          variant="outlined"
+        value={createForm.code}
+        onChange={(e) => setCreateForm(prev => ({ ...prev, code: e.target.value }))}
+        />
+        <TextField
+        margin="dense"
+        label="Mô tả"
+          fullWidth
+          multiline
+        rows={3}
+        variant="outlined"
+        value={createForm.description}
+        onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
+        />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>
-            Hủy
-          </Button>
-          <Button variant="contained">
-            Tạo lớp
-          </Button>
+        <Button onClick={() => setOpenDialog(false)}>
+        Hủy
+        </Button>
+        <Button variant="contained" onClick={handleCreateSubmit} disabled={!createForm.name || !createForm.code}>
+        Tạo lớp
+        </Button>
         </DialogActions>
       </Dialog>
     </Box>
