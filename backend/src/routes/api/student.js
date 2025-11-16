@@ -152,6 +152,7 @@ studentRouter.get('/dashboard', async (req, res) => {
       totalClasses,
       totalCredits
     }
+  });
 });
 
 // ---- Chat System ----
