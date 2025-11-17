@@ -4,8 +4,8 @@ const NotificationSchema = new mongoose.Schema(
   {
     recipientId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true }, // Sinh viên nhận thông báo
     senderId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true }, // Giảng viên gửi
-    classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', required: false, index: true }, // Lớp học (optional for admin notifications)
-    type: {
+     classId: { type: mongoose.Schema.Types.ObjectId, ref: 'Class', index: true }, // Lớp học (optional for admin notifications)
+     type: {
       type: String,
       enum: ['assignment_created', 'assignment_graded', 'document_uploaded', 'announcement_created', 'admin_notification'],
       required: true,
@@ -14,12 +14,7 @@ const NotificationSchema = new mongoose.Schema(
     title: { type: String, required: true },
     content: { type: String, required: true },
     isRead: { type: Boolean, default: false, index: true },
-    metadata: {
-      assignmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Assignment' },
-      documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Document' },
-      announcementId: { type: mongoose.Schema.Types.ObjectId, ref: 'Announcement' },
-      score: { type: Number }, // For graded assignments
-    }
+    metadata: { type: mongoose.Schema.Types.Mixed, default: {} } // Flexible metadata for different notification types
   },
   { timestamps: true }
 );

@@ -625,12 +625,12 @@ adminRouter.post('/send-notification', async (req, res) => {
     return res.status(404).json({ error: 'RECIPIENT_NOT_FOUND' });
   }
 
-  const { NotificationModel } = await import('../../models/Notification.js');
-
   try {
+    const { NotificationModel } = await import('../../models/Notification.js');
+
     await NotificationModel.create({
       recipientId,
-      senderId: req.user.id,
+      senderId: req.user?.id,
       classId: null, // Admin notifications are system-wide, not tied to a class
       type: 'admin_notification',
       title,
@@ -640,21 +640,26 @@ adminRouter.post('/send-notification', async (req, res) => {
     });
 
     // Log admin notification activity
-    await logUserActivity(
-      req.user.id,
-      'admin',
-      'send_notification',
-      null,
-      'notification',
-      `Sent notification to ${recipient.fullName}: ${title}`,
-      { recipientId, recipientName: recipient.fullName, title },
-      req
-    );
+    try {
+      await logUserActivity(
+        req.user?.id,
+        'admin',
+        'send_notification',
+        null,
+        'notification',
+        `Sent notification to ${recipient.fullName}: ${title}`,
+        { recipientId, recipientName: recipient.fullName, title },
+        req
+      );
+    } catch (logError) {
+      console.warn('Failed to log notification activity:', logError);
+      // Don't fail the request if logging fails
+    }
 
     res.json({ success: true, message: 'Notification sent successfully' });
   } catch (error) {
     console.error('Error sending notification:', error);
-    res.status(500).json({ error: 'Failed to send notification' });
+    res.status(500).json({ error: 'Failed to send notification', details: error.message });
   }
 });
 
