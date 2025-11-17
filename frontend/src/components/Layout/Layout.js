@@ -38,7 +38,8 @@ import {
   Notifications,
   DoneAll,
   Description,
-} from '@mui/icons-material';
+  Games,
+  } from '@mui/icons-material';
 import { api } from '../../api/client';
 
 const drawerWidth = 240;
@@ -88,6 +89,7 @@ const Layout = () => {
   const studentMenuItems = [
     { text: 'Trang chủ', icon: <Dashboard />, path: '/student' },
     { text: 'Lớp học', icon: <Class />, path: '/student/classes' },
+    { text: 'Thực hành bộ môn', icon: <Games />, path: '/student/practice' },
     { text: 'Bài tập', icon: <Assignment />, path: '/student/assignments' },
     { text: 'Tài khoản', icon: <Person />, path: '/student/profile' },
   ];

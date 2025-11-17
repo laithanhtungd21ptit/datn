@@ -14,6 +14,8 @@ import StudentClassDetail from './pages/Student/Classes/StudentClassDetail';
 import StudentAssignments from './pages/Student/Assignments/StudentAssignments';
 import StudentProfile from './pages/Student/Profile/StudentProfile';
 import StudentExamPage from './pages/Student/Exams/StudentExamPage';
+import StudentPracticePage from './pages/Student/Practice/StudentPracticePage';
+import StudentPracticeGamePage from './pages/Student/Practice/StudentPracticeGamePage';
 import AdminDashboard from './pages/Admin/Dashboard/AdminDashboard';
 import AdminAccountManagement from './pages/Admin/AccountManagement/AdminAccountManagement';
 import AdminClassSubjectManagement from './pages/Admin/ClassSubjectManagement/AdminClassSubjectManagement';
@@ -28,8 +30,10 @@ function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       {/* Full-screen exam route (no Layout) */}
-      <Route path="/student/exams/:id" element={<StudentExamPage />} />
-      <Route path="/" element={<Layout />}>
+       <Route path="/student/exams/:id" element={<StudentExamPage />} />
+       {/* Full-screen practice game route (no Layout) */}
+       <Route path="/student/practice/:subjectId/:gameId" element={<StudentPracticeGamePage />} />
+       <Route path="/" element={<Layout />}>
         {/* Teacher Routes */}
         <Route path="teacher" element={<ProtectedRoute role="teacher"><TeacherDashboard /></ProtectedRoute>} />
         <Route path="teacher/classes" element={<ProtectedRoute role="teacher"><TeacherClasses /></ProtectedRoute>} />
@@ -42,6 +46,7 @@ function App() {
         <Route path="student" element={<ProtectedRoute role="student"><StudentDashboard /></ProtectedRoute>} />
         <Route path="student/classes" element={<ProtectedRoute role="student"><StudentClasses /></ProtectedRoute>} />
         <Route path="student/classes/:id" element={<ProtectedRoute role="student"><StudentClassDetail /></ProtectedRoute>} />
+        <Route path="student/practice" element={<ProtectedRoute role="student"><StudentPracticePage /></ProtectedRoute>} />
         <Route path="student/assignments" element={<ProtectedRoute role="student"><StudentAssignments /></ProtectedRoute>} />
         <Route path="student/profile" element={<ProtectedRoute role="student"><StudentProfile /></ProtectedRoute>} />
         
