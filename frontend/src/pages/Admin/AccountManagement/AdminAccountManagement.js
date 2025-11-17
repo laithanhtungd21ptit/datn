@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import dayjs from 'dayjs';
+import 'dayjs/locale/vi';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -598,8 +600,8 @@ const AdminAccountManagement = () => {
                       size="small"
                     />
                   </TableCell>
-                  <TableCell>{user.lastLogin}</TableCell>
-                  <TableCell>{user.createdAt}</TableCell>
+                  <TableCell>{user.lastLogin ? dayjs(user.lastLogin).locale('vi').format('DD/MM/YYYY HH:mm') : 'Chưa đăng nhập'}</TableCell>
+                  <TableCell>{dayjs(user.createdAt).locale('vi').format('DD/MM/YYYY HH:mm')}</TableCell>
                   <TableCell>
                     <IconButton
                       size="small"
