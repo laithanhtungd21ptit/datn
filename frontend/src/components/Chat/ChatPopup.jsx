@@ -69,14 +69,25 @@ const ChatWindow = styled(Paper)(({ theme }) => ({
   position: 'fixed',
   bottom: 80,
   right: 20,
-  width: 380,
-  height: 600,
+  width: 400, // Fixed width for chat area
+  maxWidth: '90vw', // Responsive on small screens
+  height: 520,
+  maxHeight: '75vh',
   zIndex: 1000,
   display: 'flex',
   flexDirection: 'column',
   boxShadow: '0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1)',
   borderRadius: theme.spacing(1),
   overflow: 'hidden',
+  [theme.breakpoints.down('sm')]: {
+    width: '95vw',
+    height: '80vh',
+    maxWidth: '95vw',
+    maxHeight: '80vh',
+    bottom: 10,
+    right: '2.5vw',
+    borderRadius: theme.spacing(1),
+  },
 }));
 
 const ChatHeader = styled(Box)(({ theme }) => ({
@@ -130,12 +141,40 @@ const ContactItem = styled(ListItemButton)(({ theme }) => ({
   },
 }));
 
-const Sidebar = styled(Box)(({ theme }) => ({
-  width: 380,
-  borderRight: `1px solid ${theme.palette.divider}`,
+const Sidebar = styled(Box, {
+  shouldForwardProp: (prop) => prop !== 'isOpen',
+})(({ theme, isOpen }) => ({
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  width: 280,
+  height: '100%',
   backgroundColor: 'white',
   display: 'flex',
   flexDirection: 'column',
+  zIndex: 1001,
+  boxShadow: '2px 0 8px rgba(0, 0, 0, 0.1)',
+  transform: isOpen ? 'translateX(0)' : 'translateX(-100%)',
+  transition: 'transform 0.3s ease-in-out',
+  [theme.breakpoints.down('sm')]: {
+    width: '100%',
+  },
+}));
+
+const SidebarBackdrop = styled(Box, {
+  shouldForwardProp: (prop) => prop !== 'isOpen',
+})(({ theme, isOpen }) => ({
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  backgroundColor: 'rgba(0, 0, 0, 0.3)',
+  zIndex: 1000,
+  opacity: isOpen ? 1 : 0,
+  visibility: isOpen ? 'visible' : 'hidden',
+  transition: 'opacity 0.3s ease-in-out, visibility 0.3s ease-in-out',
+  pointerEvents: isOpen ? 'auto' : 'none',
 }));
 
 const SidebarHeader = styled(Box)(({ theme }) => ({
@@ -150,6 +189,13 @@ const SearchBox = styled(TextField)(({ theme }) => ({
     backgroundColor: 'white',
   },
 }));
+
+const formatFileSize = (bytes) => {
+  if (!bytes && bytes !== 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
 
 const ChatPopup = () => {
   const { currentUser } = useAuth();
@@ -175,9 +221,12 @@ const ChatPopup = () => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState([]);
   const typingTimeoutRef = useRef(null);
 
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
 
   // Initialize socket connection
   useEffect(() => {
@@ -315,51 +364,102 @@ const ChatPopup = () => {
     }
   };
 
-  // Send message
   const handleSendMessage = async () => {
-  if (!newMessage.trim() || !currentConversation) {
-      console.log('Cannot send: no message or no conversation', { newMessage, currentConversation });
-    return;
-  }
+    const trimmedMessage = newMessage.trim();
+    if (!currentConversation) {
+      console.log('Cannot send: no conversation selected');
+      return;
+    }
+    if (!trimmedMessage && attachedFiles.length === 0) {
+      return;
+    }
 
-  try {
-  const messageData = {
-    conversationId: currentConversation.id,
-        content: newMessage.trim(),
-    messageType: 'text'
-      };
+    try {
+      let response;
+      if (attachedFiles.length > 0) {
+        const formData = new FormData();
+        formData.append('conversationId', currentConversation.id);
+        if (trimmedMessage) {
+          formData.append('content', trimmedMessage);
+        }
+        attachedFiles.forEach(att => {
+          formData.append('attachments', att.file);
+        });
+        response = await api.chatSendMessage(formData);
+      } else {
+        const messageData = {
+          conversationId: currentConversation.id,
+          content: trimmedMessage,
+          messageType: 'text',
+        };
+        response = await api.chatSendMessage(messageData);
+      }
 
-      console.log('Sending message:', messageData);
-      const response = await api.chatSendMessage(messageData);
-
-      // Add actual message to UI
-      const message = response.message || {
+      const message = response?.message || {
         _id: Date.now().toString(),
         senderId: currentUser.id,
-        content: newMessage.trim(),
+        content: trimmedMessage || (attachedFiles.length === 1 ? attachedFiles[0].name : `${attachedFiles.length} tệp đính kèm`),
         createdAt: new Date().toISOString(),
-        status: 'sent'
+        status: 'sent',
+        attachments: attachedFiles.map(att => ({
+          url: att.previewUrl || '',
+          fileName: att.name,
+          fileType: att.type,
+          fileSize: att.size,
+          isImage: att.type.startsWith('image/'),
+        })),
       };
 
       setMessages(prev => [...prev, message]);
       setNewMessage('');
-
-      // Broadcast via socket
-      if (socket) {
-      socket.emit('send_message', {
-      conversationId: currentConversation.id,
-      message
+      attachedFiles.forEach(att => {
+        if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
       });
-      }
+      setAttachedFiles([]);
 
-      // Stop typing indicator
       if (socket) {
-      socket.emit('typing_stop', currentConversation.id);
+        socket.emit('send_message', {
+          conversationId: currentConversation.id,
+          message,
+        });
+        socket.emit('typing_stop', currentConversation.id);
       }
     } catch (error) {
       console.error('Failed to send message:', error);
     }
   };
+
+  const handleAttachmentSelect = (event, type = 'file') => {
+    const files = Array.from(event.target.files || []);
+    if (!files.length) return;
+    const enhanced = files.map(file => ({
+      id: `${file.name}-${file.lastModified}-${Math.random().toString(36).slice(2, 8)}`,
+      file,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+      previewUrl: file.type.startsWith('image/') ? URL.createObjectURL(file) : null,
+    }));
+    setAttachedFiles(prev => [...prev, ...enhanced]);
+    event.target.value = '';
+  };
+
+  const handleRemoveAttachment = (id) => {
+    setAttachedFiles(prev => {
+      const updated = prev.filter(att => att.id !== id);
+      const removed = prev.find(att => att.id === id);
+      if (removed?.previewUrl) URL.revokeObjectURL(removed.previewUrl);
+      return updated;
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      attachedFiles.forEach(att => {
+        if (att.previewUrl) URL.revokeObjectURL(att.previewUrl);
+      });
+    };
+  }, [attachedFiles]);
 
   // Handle typing
   const handleTyping = () => {
@@ -418,12 +518,15 @@ const ChatPopup = () => {
       </ChatFab>
 
       {/* Chat Window */}
-      <Fade in={isOpen}>
-        <ChatWindow>
-          <Box sx={{ display: 'flex', height: '100%' }}>
+      {isOpen && (
+        <Fade in={isOpen}>
+          <ChatWindow>
+            <Box sx={{ position: 'relative', height: '100%', width: '100%' }}>
+            {/* Sidebar Backdrop */}
+            <SidebarBackdrop isOpen={showSidebar} onClick={() => setShowSidebar(false)} />
+            
             {/* Sidebar */}
-            {showSidebar && (
-              <Sidebar>
+            <Sidebar isOpen={showSidebar}>
                 <SidebarHeader>
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
                     <Typography variant="h6" sx={{ color: '#0084FF' }}>
@@ -653,11 +756,10 @@ const ChatPopup = () => {
                     </>
                   )}
                 </Box>
-              </Sidebar>
-            )}
+            </Sidebar>
 
             {/* Chat Area */}
-            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ width: '100%', height: '100%', display: 'flex', flexDirection: 'column' }}>
               {currentConversation ? (
                 <>
                   {/* Chat Header */}
@@ -739,9 +841,46 @@ const ChatPopup = () => {
                               )}
                               <MessageBubble isOwn={isOwn}>
                                 <MessageContent isOwn={isOwn}>
-                                  <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
-                                    {msg.content}
-                                  </Typography>
+                                  {msg.content && (
+                                    <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                                      {msg.content}
+                                    </Typography>
+                                  )}
+                                  {msg.attachments && msg.attachments.length > 0 && (
+                                    <Box sx={{ mt: msg.content ? 1 : 0, display: 'flex', flexDirection: 'column', gap: 1 }}>
+                                      {msg.attachments.map((att, idx) => (
+                                        att.isImage ? (
+                                          <Box
+                                            key={`${att.url || att.fileName}-${idx}`}
+                                            component="img"
+                                            src={att.url}
+                                            alt={att.fileName}
+                                            sx={{
+                                              maxWidth: 240,
+                                              borderRadius: 1,
+                                              border: '1px solid rgba(0,0,0,0.08)'
+                                            }}
+                                          />
+                                        ) : (
+                                          <Button
+                                            key={`${att.url || att.fileName}-${idx}`}
+                                            variant="outlined"
+                                            size="small"
+                                            color={isOwn ? 'inherit' : 'primary'}
+                                            startIcon={<AttachFileIcon />}
+                                            onClick={() => {
+                                              if (att.url) {
+                                                window.open(att.url, '_blank');
+                                              }
+                                            }}
+                                            sx={{ maxWidth: 240 }}
+                                          >
+                                            {att.fileName || 'Tệp đính kèm'}
+                                          </Button>
+                                        )
+                                      ))}
+                                    </Box>
+                                  )}
                                 </MessageContent>
                                 {isOwn && (
                                   <MessageTime>
@@ -761,14 +900,41 @@ const ChatPopup = () => {
                   </MessagesContainer>
 
                   {/* Message Input */}
-                  <Box sx={{ p: 2, borderTop: '1px solid #e4e6ea', bgcolor: 'white' }}>
+                  <Box sx={{ p: 2, borderTop: '1px solid #e4e6ea', bgcolor: 'white', position: 'relative' }}>
+                    {attachedFiles.length > 0 && (
+                      <Box sx={{ mb: 1, display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {attachedFiles.map(file => (
+                          <Chip
+                            key={file.id}
+                            label={`${file.name} (${formatFileSize(file.size)})`}
+                            onDelete={() => handleRemoveAttachment(file.id)}
+                            avatar={file.previewUrl ? <Avatar src={file.previewUrl} alt={file.name} /> : undefined}
+                          />
+                        ))}
+                      </Box>
+                    )}
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <IconButton size="small" sx={{ color: '#65676b' }}>
+                      <IconButton size="small" sx={{ color: '#65676b' }} onClick={() => fileInputRef.current?.click()}>
                         <AttachFileIcon />
                       </IconButton>
-                      <IconButton size="small" sx={{ color: '#65676b' }}>
+                      <IconButton size="small" sx={{ color: '#65676b' }} onClick={() => imageInputRef.current?.click()}>
                         <PhotoIcon />
                       </IconButton>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={(e) => handleAttachmentSelect(e, 'file')}
+                      />
+                      <input
+                        ref={imageInputRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        style={{ display: 'none' }}
+                        onChange={(e) => handleAttachmentSelect(e, 'image')}
+                      />
                       <TextField
                         fullWidth
                         placeholder="Aa"
@@ -829,11 +995,14 @@ const ChatPopup = () => {
 
                     {/* Emoji Picker */}
                     {showEmojiPicker && (
-                      <Box sx={{ position: 'absolute', bottom: '60px', right: '20px' }}>
-                        <EmojiPicker onEmojiClick={(emojiData) => {
-                          setNewMessage(prev => prev + emojiData.emoji);
-                          setShowEmojiPicker(false);
-                        }} />
+                      <Box sx={{ position: 'absolute', bottom: '100%', right: 0, mb: 1, zIndex: 1001 }}>
+                        <EmojiPicker 
+                          onEmojiClick={(emojiData) => {
+                            setNewMessage(prev => prev + emojiData.emoji);
+                            setShowEmojiPicker(false);
+                          }}
+                          previewConfig={{ showPreview: false }}
+                        />
                       </Box>
                     )}
                   </Box>
@@ -877,11 +1046,11 @@ const ChatPopup = () => {
                     </Button>
                   </Box>
                 )}
-              )}
             </Box>
           </Box>
         </ChatWindow>
       </Fade>
+      )}
     </>
   );
 };

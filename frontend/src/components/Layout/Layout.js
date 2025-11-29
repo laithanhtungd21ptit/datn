@@ -60,24 +60,42 @@ const Layout = () => {
   const isAdmin = location.pathname.includes('/admin');
 
   const { currentUser } = useAuth();
-  const roleLabel = isTeacher ? 'Giảng viên' : isStudent ? 'Sinh viên' : 'Quản trị viên';
+  const roleLabel = isTeacher ? 'GV' : isStudent ? 'SV' : 'Quản trị viên';
   const displayName = currentUser?.fullName || (isTeacher ? 'Giảng viên Demo' : isStudent ? 'Sinh viên Demo' : 'Admin Demo');
   const userCode = currentUser?.username || '';
 
-  // Fetch notifications for students
+  // Fetch notifications for students and teachers
   useEffect(() => {
-    if (isStudent && currentUser) {
+    if ((isStudent || isTeacher) && currentUser) {
       const fetchNotifications = async () => {
         try {
-          const notifications = await api.studentNotifications();
+          // Ensure token is available before fetching
+          const token = localStorage.getItem('accessToken');
+          if (!token) {
+            console.warn('No token available for fetching notifications');
+            return;
+          }
+          
+          const notifications = isStudent 
+            ? await api.studentNotifications()
+            : await api.teacherNotifications();
           setNotificationsData(notifications);
         } catch (error) {
-          console.error('Failed to fetch notifications:', error);
+          // Only log error if it's not a 403 (might be temporary token sync issue)
+          if (error.message !== 'FORBIDDEN') {
+            console.error('Failed to fetch notifications:', error);
+          }
         }
       };
-      fetchNotifications();
+      
+      // Add a small delay to ensure token is synced after profile updates
+      const timeoutId = setTimeout(() => {
+        fetchNotifications();
+      }, 100);
+      
+      return () => clearTimeout(timeoutId);
     }
-  }, [isStudent, currentUser]);
+  }, [isStudent, isTeacher, currentUser]);
 
   const teacherMenuItems = [
     { text: 'Trang chủ', icon: <Dashboard />, path: '/teacher' },
@@ -128,13 +146,18 @@ const Layout = () => {
     setNotifAnchorEl(null);
 
     // Mark as read if not already read
-    if (isStudent && !notification.isRead) {
+    if ((isStudent || isTeacher) && !notification.isRead) {
       try {
-        await api.studentMarkNotificationRead(notification.id);
-        // Update local state
-        setNotificationsData(prev =>
-          prev.map(n => n.id === notification.id ? { ...n, isRead: true } : n)
-        );
+        if (isStudent) {
+          await api.studentMarkNotificationRead(notification.id);
+        } else if (isTeacher) {
+          await api.teacherMarkNotificationRead(notification.id);
+        }
+        // Reload notifications from server to ensure sync
+        const notifications = isStudent 
+          ? await api.studentNotifications()
+          : await api.teacherNotifications();
+        setNotificationsData(notifications);
       } catch (error) {
         console.error('Failed to mark notification as read:', error);
       }
@@ -142,13 +165,18 @@ const Layout = () => {
   };
 
   const handleMarkAllRead = async () => {
-    if (isStudent && notificationsData.length > 0) {
+    if ((isStudent || isTeacher) && notificationsData.length > 0) {
       try {
-        await api.studentMarkAllNotificationsRead();
-        // Update local state
-        setNotificationsData(prev =>
-          prev.map(n => ({ ...n, isRead: true }))
-        );
+        if (isStudent) {
+          await api.studentMarkAllNotificationsRead();
+        } else if (isTeacher) {
+          await api.teacherMarkAllNotificationsRead();
+        }
+        // Reload notifications from server to ensure sync
+        const notifications = isStudent 
+          ? await api.studentNotifications()
+          : await api.teacherNotifications();
+        setNotificationsData(notifications);
       } catch (error) {
         console.error('Failed to mark all notifications as read:', error);
       }
@@ -248,7 +276,7 @@ const Layout = () => {
           >
             Hệ thống Quản lý Bài tập
           </Typography>
-          {isStudent && (
+          {(isStudent || isTeacher) && (
           <IconButton color="inherit" onClick={handleNotifClick} aria-haspopup="true" aria-controls="menu-notifications" aria-label="notifications">
               <Badge badgeContent={notificationsData.filter(n => !n.isRead).length} color="error">
                 <Notifications />
@@ -391,6 +419,9 @@ const Layout = () => {
         {n.type === 'announcement_created' && <Notifications color={n.isRead ? "disabled" : "primary"} />}
         {n.type === 'assignment_created' && <Assignment color={n.isRead ? "disabled" : "warning"} />}
           {n.type === 'assignment_graded' && <Assignment color={n.isRead ? "disabled" : "success"} />}
+          {n.type === 'assignment_submitted' && <Assignment color={n.isRead ? "disabled" : "success"} />}
+          {n.type === 'assignment_pending' && <Assignment color={n.isRead ? "disabled" : "warning"} />}
+          {n.type === 'comment_created' && <Description color={n.isRead ? "disabled" : "info"} />}
           {n.type === 'document_uploaded' && <Description color={n.isRead ? "disabled" : "info"} />}
         </ListItemIcon>
         <ListItemText

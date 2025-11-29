@@ -63,3 +63,6 @@ coverage/
 # Temporary folders
 tmp/
 temp/
+
+# Uploads
+backend/uploads/

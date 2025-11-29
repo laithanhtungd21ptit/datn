@@ -50,7 +50,11 @@ const Login = () => {
       else if (userRole === 'student') navigate('/student');
       else navigate('/admin');
     } catch (err) {
-      setError(err.message || 'Đăng nhập thất bại');
+      if (err.message === 'ACCOUNT_DISABLED') {
+        setError('Tài khoản của bạn đã bị khóa hoặc chưa kích hoạt. Vui lòng liên hệ quản trị viên.');
+      } else {
+        setError(err.message || 'Đăng nhập thất bại');
+      }
     }
   };
 

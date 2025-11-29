@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -11,43 +11,84 @@ import {
   Alert,
 } from '@mui/material';
 import { AttachFile } from '@mui/icons-material';
-
-const mockExams = [
-  {
-    id: '2',
-    title: 'Kỳ thi giữa kỳ: Cơ sở dữ liệu',
-    description: 'Làm bài thi giữa kỳ trong thời lượng quy định. Bật camera/micro để giám sát.',
-    durationMinutes: 90,
-    requireMonitoring: true,
-  },
-];
+import { api } from '../../../api/client';
 
 const StudentExamPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-  const exam = mockExams.find(e => e.id === id) || mockExams[0];
-  const [timeLeftSec, setTimeLeftSec] = React.useState((exam?.durationMinutes || 60) * 60);
-  const [stream, setStream] = React.useState(null);
-  const [error, setError] = React.useState('');
+  const [exam, setExam] = useState(null);
+  const [status, setStatus] = useState('loading'); // waiting | in_progress | ended
+  const [timeLeftSec, setTimeLeftSec] = useState(0);
+  const [waitingCountdown, setWaitingCountdown] = useState('');
+  const [stream, setStream] = useState(null);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
-  React.useEffect(() => {
-    let timer = setInterval(() => {
-      setTimeLeftSec(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          // Auto submit or exit could go here
-          return 0;
-        }
-        return prev - 1;
-      });
+  const loadExam = useCallback(async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const data = await api.studentExamDetail(id);
+      setExam(data);
+      setStatus(data.status);
+      if (data.status === 'in_progress') {
+        const seconds = Math.max(0, Math.floor((new Date(data.endTime) - new Date()) / 1000));
+        setTimeLeftSec(seconds);
+      } else {
+        setTimeLeftSec(0);
+      }
+    } catch (e) {
+      setError(e?.message || 'Không thể tải thông tin kỳ thi');
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    loadExam();
+  }, [loadExam]);
+
+  useEffect(() => {
+    if (status !== 'waiting' || !exam?.startTime) {
+      setWaitingCountdown('');
+      return;
+    }
+    const updateCountdown = () => {
+      const diff = Math.max(0, new Date(exam.startTime) - new Date());
+      const hours = Math.floor(diff / (1000 * 60 * 60));
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      setWaitingCountdown(`${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`);
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [status, exam]);
+
+  useEffect(() => {
+    if (status !== 'in_progress' || timeLeftSec <= 0) return;
+    const timer = setInterval(() => {
+      setTimeLeftSec(prev => Math.max(prev - 1, 0));
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [status, timeLeftSec]);
 
-  React.useEffect(() => {
+  useEffect(() => {
+    if (status !== 'in_progress') {
+      if (stream) {
+        stream.getTracks().forEach(t => t.stop());
+        setStream(null);
+      }
+      return;
+    }
+    let cancelled = false;
     (async () => {
       try {
         const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        if (cancelled) {
+          s.getTracks().forEach(t => t.stop());
+          return;
+        }
         setStream(s);
         const videoEl = document.getElementById('exam-page-video');
         if (videoEl) {
@@ -58,9 +99,13 @@ const StudentExamPage = () => {
       }
     })();
     return () => {
-      if (stream) stream.getTracks().forEach(t => t.stop());
+      cancelled = true;
+      setStream(prev => {
+        if (prev) prev.getTracks().forEach(t => t.stop());
+        return null;
+      });
     };
-  }, []); // init once
+  }, [status]);
 
   const handleExit = () => {
     if (stream) stream.getTracks().forEach(t => t.stop());
@@ -69,6 +114,64 @@ const StudentExamPage = () => {
 
   const mm = Math.floor(timeLeftSec / 60);
   const ss = String(timeLeftSec % 60).padStart(2, '0');
+
+  if (loading) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert severity="info">Đang tải thông tin kỳ thi...</Alert>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+        <Button variant="contained" onClick={loadExam}>Thử lại</Button>
+      </Box>
+    );
+  }
+
+  if (!exam) {
+    return (
+      <Box sx={{ p: 2 }}>
+        <Alert severity="warning">Không tìm thấy kỳ thi.</Alert>
+      </Box>
+    );
+  }
+
+  if (status === 'waiting') {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography variant="h4" gutterBottom>{exam.title}</Typography>
+        <Typography variant="subtitle1" color="text.secondary" gutterBottom>
+          Kỳ thi sẽ bắt đầu lúc {new Date(exam.startTime).toLocaleString('vi-VN')}
+        </Typography>
+        <Typography variant="h2" color="primary" sx={{ mb: 3 }}>
+          {waitingCountdown || '00:00:00'}
+        </Typography>
+        <Button variant="contained" onClick={loadExam}>
+          Làm mới
+        </Button>
+        <Button sx={{ ml: 2 }} onClick={handleExit}>
+          Quay lại
+        </Button>
+      </Box>
+    );
+  }
+
+  if (status === 'ended') {
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          Kỳ thi này đã kết thúc. Bạn không thể tham gia nữa.
+        </Alert>
+        <Button variant="contained" onClick={handleExit}>
+          Quay lại
+        </Button>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 2 }}>

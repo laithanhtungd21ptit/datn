@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Grid,
   Paper,
@@ -24,7 +25,6 @@ import {
   Schedule,
   Assignment,
   People,
-  TrendingUp,
   Notifications,
   Add,
   MoreVert,
@@ -36,10 +36,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { api } from '../../../api/client';
 
 const TeacherDashboard = () => {
+  const navigate = useNavigate();
   const [openNotificationDialog, setOpenNotificationDialog] = useState(false);
   const [selectedNotification, setSelectedNotification] = useState(null);
   const [openScheduleDialog, setOpenScheduleDialog] = useState(false);
   const [selectedSchedule, setSelectedSchedule] = useState(null);
+  const [showAllSchedule, setShowAllSchedule] = useState(false);
+  const [showAllNotifications, setShowAllNotifications] = useState(false);
 
   const [notifications, setNotifications] = useState([
     { 
@@ -119,8 +122,7 @@ const TeacherDashboard = () => {
   const [quickStats, setQuickStats] = useState([
     { title: 'Tổng lớp học', value: 12, icon: <People />, color: '#1976d2' },
     { title: 'Bài tập chưa chấm', value: 8, icon: <Assignment />, color: '#f57c00' },
-    { title: 'Sinh viên', value: 350, icon: <People />, color: '#388e3c' },
-    { title: 'Thống kê tuần', value: '95%', icon: <TrendingUp />, color: '#7b1fa2' },
+    { title: 'Kỳ thi', value: 3, icon: <People />, color: '#388e3c' },
   ]);
 
   const [assignmentData, setAssignmentData] = useState([
@@ -142,7 +144,6 @@ const TeacherDashboard = () => {
             { title: 'Tổng lớp học', value: data.stats.classes, icon: <People />, color: '#1976d2' },
             { title: 'Bài tập chưa chấm', value: data.stats.assignments, icon: <Assignment />, color: '#f57c00' },
             { title: 'Kỳ thi', value: data.stats.exams, icon: <People />, color: '#388e3c' },
-            { title: 'Thống kê tuần', value: '95%', icon: <TrendingUp />, color: '#7b1fa2' },
           ]);
         }
         if (Array.isArray(data?.notifications)) {
@@ -170,9 +171,23 @@ const TeacherDashboard = () => {
     })();
   }, []);
 
-  const handleViewNotification = (notification) => {
+  const handleViewNotification = async (notification) => {
     setSelectedNotification(notification);
     setOpenNotificationDialog(true);
+
+    // Mark as read if not already read
+    if (!notification.isRead) {
+      try {
+        await api.teacherMarkNotificationRead(notification.id);
+        // Reload notifications from server to ensure sync
+        const data = await api.teacherDashboard();
+        if (Array.isArray(data?.notifications)) {
+          setNotifications(data.notifications);
+        }
+      } catch (error) {
+        console.error('Failed to mark notification as read:', error);
+      }
+    }
   };
 
   const handleViewSchedule = (schedule) => {
@@ -225,47 +240,83 @@ const TeacherDashboard = () => {
 
       <Grid container spacing={3}>
         {/* Today's Schedule */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
+        <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
+          <Paper sx={{ p: 2, width: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" component="div">
+              <Typography 
+                variant="h6" 
+                component="div"
+                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' }, flex: 1 }}
+              >
                 <Schedule sx={{ mr: 1, verticalAlign: 'middle' }} />
-                Lịch dạy hôm nay
+                Lịch nộp hôm nay
               </Typography>
-              <Button size="small" startIcon={<Add />}>
-                Thêm lịch
+              <Button
+                size="small"
+                onClick={() => setShowAllSchedule(!showAllSchedule)}
+                sx={{ display: todaySchedule.length > 4 ? 'block' : 'none', ml: 1 }}
+              >
+                {showAllSchedule ? 'Thu gọn' : `Xem tất cả (${todaySchedule.length})`}
               </Button>
             </Box>
-            <List>
-              {todaySchedule.map((item, index) => (
-                <ListItem key={index} divider button onClick={() => handleViewSchedule(item)}>
-                  <ListItemIcon>
-                    <Schedule color="primary" />
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={`${item.time} - ${item.subject}`}
-                    secondary={`Lớp: ${item.class} | Phòng: ${item.room}`}
-                  />
+            <List sx={{ flex: 1 }}>
+              {todaySchedule.length === 0 ? (
+                <ListItem>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', width: '100%' }}>
+                    Không có bài tập nào có hạn nộp hôm nay
+                  </Typography>
                 </ListItem>
-              ))}
+              ) : (
+                <>
+                  {todaySchedule.slice(0, showAllSchedule ? todaySchedule.length : 4).map((item, index) => (
+                    <ListItem key={item.id || index} divider button onClick={() => handleViewSchedule(item)}>
+                      <ListItemIcon>
+                        <Assignment color="primary" />
+                      </ListItemIcon>
+                      <ListItemText
+                        primary={`${item.time} - ${item.subject}`}
+                        secondary={`Lớp: ${item.class} | Đã nộp: ${item.submittedCount || 0}/${item.totalStudents || 0}`}
+                      />
+                    </ListItem>
+                  ))}
+                  {!showAllSchedule && todaySchedule.length > 4 && (
+                    <ListItem>
+                      <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', width: '100%' }}>
+                        (Còn {todaySchedule.length - 4} bài tập khác)
+                      </Typography>
+                    </ListItem>
+                  )}
+                </>
+              )}
             </List>
           </Paper>
         </Grid>
 
         {/* Notifications */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 2 }}>
+        <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
+          <Paper sx={{ p: 2, width: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" component="div">
+              <Typography 
+                variant="h6" 
+                component="div"
+                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' }, flex: 1 }}
+              >
                 <Notifications sx={{ mr: 1, verticalAlign: 'middle' }} />
                 Thông báo mới
               </Typography>
-              <IconButton size="small">
+              <Button
+                size="small"
+                onClick={() => setShowAllNotifications(!showAllNotifications)}
+                sx={{ display: notifications.length > 4 ? 'block' : 'none', ml: 1 }}
+              >
+                {showAllNotifications ? 'Thu gọn' : `Xem tất cả (${notifications.length})`}
+              </Button>
+              <IconButton size="small" sx={{ ml: 1 }}>
                 <MoreVert />
               </IconButton>
             </Box>
-            <List>
-              {notifications.map((notification) => (
+            <List sx={{ flex: 1 }}>
+              {notifications.slice(0, showAllNotifications ? notifications.length : 4).map((notification) => (
                 <ListItem key={notification.id} divider button onClick={() => handleViewNotification(notification)}>
                   <ListItemIcon>
                     {getNotificationIcon(notification.type)}
@@ -276,6 +327,13 @@ const TeacherDashboard = () => {
                   />
                 </ListItem>
               ))}
+              {!showAllNotifications && notifications.length > 4 && (
+                <ListItem>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', width: '100%' }}>
+                    (Còn {notifications.length - 4} thông báo khác)
+                  </Typography>
+                </ListItem>
+              )}
             </List>
           </Paper>
         </Grid>
@@ -403,9 +461,6 @@ const TeacherDashboard = () => {
           <Button onClick={() => setOpenNotificationDialog(false)}>
             Đóng
           </Button>
-          <Button variant="contained">
-            Xem chi tiết
-          </Button>
         </DialogActions>
       </Dialog>
 
@@ -417,7 +472,7 @@ const TeacherDashboard = () => {
         fullWidth
       >
         <DialogTitle>
-          Chi tiết lịch dạy - {selectedSchedule?.subject}
+          Chi tiết bài tập - {selectedSchedule?.subject}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mb: 3 }}>
@@ -427,87 +482,52 @@ const TeacherDashboard = () => {
             <Typography variant="body2" color="text.secondary" gutterBottom>
               Lớp: {selectedSchedule?.class}
             </Typography>
-            <Typography variant="body2" color="text.secondary" gutterBottom>
-              Phòng: {selectedSchedule?.room}
-            </Typography>
+            {selectedSchedule?.isExam && (
+              <Chip label="Bài thi" color="error" size="small" sx={{ mt: 1 }} />
+            )}
           </Box>
 
           <Grid container spacing={2} sx={{ mb: 3 }}>
             <Grid item xs={12} sm={6}>
               <Typography variant="subtitle2" color="text.secondary">
-                Thời gian:
+                Hạn nộp:
               </Typography>
               <Typography variant="body2">
-                {selectedSchedule?.time}
+                {selectedSchedule?.time} - {selectedSchedule?.dueDate ? new Date(selectedSchedule.dueDate).toLocaleDateString('vi-VN') : ''}
               </Typography>
             </Grid>
             <Grid item xs={12} sm={6}>
               <Typography variant="subtitle2" color="text.secondary">
-                Thời lượng:
+                Tình trạng nộp bài:
               </Typography>
               <Typography variant="body2">
-                {selectedSchedule?.duration} phút
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Số sinh viên:
-              </Typography>
-              <Typography variant="body2">
-                {selectedSchedule?.students} sinh viên
-              </Typography>
-            </Grid>
-            <Grid item xs={12} sm={6}>
-              <Typography variant="subtitle2" color="text.secondary">
-                Phòng học:
-              </Typography>
-              <Typography variant="body2">
-                {selectedSchedule?.room}
+                {selectedSchedule?.submittedCount || 0} / {selectedSchedule?.totalStudents || 0} sinh viên
               </Typography>
             </Grid>
           </Grid>
 
           <Box sx={{ mb: 3 }}>
             <Typography variant="subtitle1" gutterBottom>
-              Mô tả buổi học:
+              Mô tả:
             </Typography>
             <Typography variant="body1" sx={{ mb: 2 }}>
-              {selectedSchedule?.description}
+              {selectedSchedule?.description || 'Không có mô tả'}
             </Typography>
           </Box>
-
-          {selectedSchedule?.topics && selectedSchedule.topics.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Nội dung chính:
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {selectedSchedule.topics.map((topic, index) => (
-                  <Chip key={index} label={topic} size="small" color="primary" />
-                ))}
-              </Box>
-            </Box>
-          )}
-
-          {selectedSchedule?.materials && selectedSchedule.materials.length > 0 && (
-            <Box sx={{ mb: 3 }}>
-              <Typography variant="subtitle1" gutterBottom>
-                Tài liệu học tập:
-              </Typography>
-              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                {selectedSchedule.materials.map((material, index) => (
-                  <Chip key={index} label={material} size="small" variant="outlined" />
-                ))}
-              </Box>
-            </Box>
-          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenScheduleDialog(false)}>
             Đóng
           </Button>
-          <Button variant="contained">
-            Vào lớp học
+          <Button 
+            variant="contained" 
+            onClick={() => {
+              if (selectedSchedule?.id) {
+                navigate(`/teacher/assignments/${selectedSchedule.id}`);
+              }
+            }}
+          >
+            Xem bài tập
           </Button>
         </DialogActions>
       </Dialog>

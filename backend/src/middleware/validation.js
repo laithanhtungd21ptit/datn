@@ -107,6 +107,15 @@ export const schemas = {
     newPassword: Joi.string().min(6).max(100).required()
   }),
 
+  notificationSettingsUpdate: Joi.object({
+    emailNotifications: Joi.boolean(),
+    smsNotifications: Joi.boolean(),
+    assignmentDeadlines: Joi.boolean(),
+    gradeUpdates: Joi.boolean(),
+    classAnnouncements: Joi.boolean(),
+    systemUpdates: Joi.boolean(),
+  }).min(1),
+
   // Login validation
   login: Joi.object({
     username: Joi.string().required(),

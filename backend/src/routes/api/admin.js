@@ -7,6 +7,7 @@ import { AssignmentModel } from '../../models/Assignment.js';
 import { EnrollmentModel } from '../../models/Enrollment.js';
 import { SubmissionModel } from '../../models/Submission.js';
 import { logUserActivity, getRecentUserActivities, getSystemLogs } from '../../utils/logger.js';
+import { shouldDeliverNotification } from '../../constants/notificationSettings.js';
 
 export const adminRouter = Router();
 
@@ -620,9 +621,13 @@ adminRouter.post('/send-notification', async (req, res) => {
   }
 
   // Validate recipient exists
-  const recipient = await UserModel.findById(recipientId).lean();
+  const recipient = await UserModel.findById(recipientId).select('fullName notificationSettings').lean();
   if (!recipient) {
     return res.status(404).json({ error: 'RECIPIENT_NOT_FOUND' });
+  }
+
+  if (!shouldDeliverNotification(recipient.notificationSettings, 'admin_notification')) {
+    return res.json({ success: true, message: 'Recipient has disabled system notifications' });
   }
 
   try {

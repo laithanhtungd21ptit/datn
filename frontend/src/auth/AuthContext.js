@@ -23,6 +23,8 @@ export function AuthProvider({ children }) {
   }, [currentUser]);
 
   const login = (token, user) => {
+    // Immediately sync token to api client (don't wait for useEffect)
+    setAuthToken(token || '');
     setAccessToken(token);
     setCurrentUser(user);
   };

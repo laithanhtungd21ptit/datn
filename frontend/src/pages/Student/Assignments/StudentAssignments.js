@@ -93,6 +93,46 @@ const StudentAssignments = () => {
   const [submissionFiles, setSubmissionFiles] = useState([]);
   const [submissionNotes, setSubmissionNotes] = useState('');
   const [examState, setExamState] = useState({ timeLeftSec: 0, stream: null, error: '' });
+  const [openExamWaitingDialog, setOpenExamWaitingDialog] = useState(false);
+  const [examWaitingInfo, setExamWaitingInfo] = useState(null);
+  const [waitingCountdown, setWaitingCountdown] = useState('');
+
+  const formatCountdown = (target) => {
+    if (!target) return '';
+    const diff = Math.max(0, new Date(target) - new Date());
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+    return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+  };
+
+  const getExamPhase = (assignment) => {
+    if (!assignment?.isExam) return null;
+    const start = assignment.startAt ? new Date(assignment.startAt) : null;
+    const end = assignment.endAt ? new Date(assignment.endAt) :
+      (start && assignment.durationMinutes ? new Date(start.getTime() + assignment.durationMinutes * 60000) : null);
+    if (!start || !end) return null;
+    const now = new Date();
+    if (now >= end) return 'ended';
+    if (now >= start) return 'in_progress';
+    return 'waiting';
+  };
+
+  const formatDate = (value) => (value ? new Date(value).toLocaleDateString('vi-VN') : '---');
+  const formatDateTime = (value) => (value ? new Date(value).toLocaleString('vi-VN') : '---');
+
+  useEffect(() => {
+    if (!openExamWaitingDialog || !examWaitingInfo?.startAt) {
+      setWaitingCountdown('');
+      return;
+    }
+    const updateCountdown = () => {
+      setWaitingCountdown(formatCountdown(examWaitingInfo.startAt));
+    };
+    updateCountdown();
+    const timer = setInterval(updateCountdown, 1000);
+    return () => clearInterval(timer);
+  }, [openExamWaitingDialog, examWaitingInfo]);
 
   useEffect(() => {
     (async () => {
@@ -107,23 +147,40 @@ const StudentAssignments = () => {
         const items = await api.studentAssignments();
 
         // Process assignments data
-        const processedItems = (items || []).map(it => ({
-          id: it.id,
-          title: it.title,
-          description: it.description || '',
-          class: it.class || '',
-          classId: it.classId,
-          teacher: it.teacher || '',
-          deadline: it.dueDate ? new Date(it.dueDate).toISOString().slice(0, 10) : '',
-          isExam: !!it.isExam,
-          durationMinutes: it.durationMinutes || null,
-          attachments: it.attachments || [],
-          mySubmission: it.mySubmission || { files: [], submittedAt: null, status: 'not_submitted' },
-          status: it.status || 'not_submitted',
-          grade: it.grade || null,
-          comment: it.comment || '',
-          createdAt: it.createdAt || new Date().toISOString(),
-        }));
+        const processedItems = (items || []).map(it => {
+          const rawDeadline = it.dueDate ? new Date(it.dueDate) : null;
+          const startAt = it.startTime || it.startAt || it.dueDate || null;
+          const rawStart = startAt ? new Date(startAt) : null;
+          const rawEnd = it.endTime
+            ? new Date(it.endTime)
+            : rawStart && it.durationMinutes
+              ? new Date(rawStart.getTime() + it.durationMinutes * 60000)
+              : rawDeadline;
+          const isOverdue = it.isOverdue !== undefined
+            ? it.isOverdue
+            : (rawDeadline ? rawDeadline < new Date() : false);
+          return {
+            id: it.id,
+            title: it.title,
+            description: it.description || '',
+            class: it.class || '',
+            classId: it.classId,
+            teacher: it.teacher || '',
+            deadline: rawDeadline ? rawDeadline.toISOString() : '',
+            isExam: !!it.isExam,
+            durationMinutes: it.durationMinutes || null,
+            requireMonitoring: !!it.requireMonitoring,
+            startAt: rawStart ? rawStart.toISOString() : '',
+            endAt: rawEnd ? rawEnd.toISOString() : '',
+            attachments: it.attachments || [],
+            mySubmission: it.mySubmission || { files: [], submittedAt: null, status: 'not_submitted' },
+            status: it.status || 'not_submitted',
+            grade: it.grade || null,
+            comment: it.comment || '',
+            createdAt: it.createdAt || new Date().toISOString(),
+            isOverdue,
+          };
+        });
 
         setAssignments(processedItems);
       } catch (e) {
@@ -133,6 +190,45 @@ const StudentAssignments = () => {
       }
     })();
     }, []);
+
+  const attemptSubmitAssignment = (assignment) => {
+    if (!assignment) return;
+    if (assignment.isOverdue) {
+      setError('Bài tập đã quá hạn, bạn không thể nộp nữa.');
+      return;
+    }
+    setSelectedAssignment(assignment);
+    setOpenSubmissionDialog(true);
+  };
+
+  const attemptEnterExam = (assignment) => {
+    if (!assignment) return;
+    const phase = getExamPhase(assignment);
+    if (phase === 'ended') {
+      setError('Kỳ thi này đã kết thúc, bạn không thể tham gia.');
+      return;
+    }
+    if (phase === 'waiting') {
+      setExamWaitingInfo(assignment);
+      setOpenExamWaitingDialog(true);
+      return;
+    }
+    navigate(`/student/exams/${assignment.id}`);
+  };
+
+  const triggerAssignmentAction = (assignment, { closeMenu = true } = {}) => {
+    if (closeMenu) handleMenuClose();
+    if (!assignment) return;
+    if (assignment.isExam) {
+      attemptEnterExam(assignment);
+    } else {
+      attemptSubmitAssignment(assignment);
+    }
+  };
+
+  const handleSubmitAssignment = (assignment, options) => {
+    triggerAssignmentAction(assignment, options);
+  };
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
@@ -146,16 +242,6 @@ const StudentAssignments = () => {
   const handleMenuClose = () => {
     setAnchorEl(null);
     setSelectedItemForMenu(null);
-  };
-
-  const handleSubmitAssignment = (assignment) => {
-    setSelectedAssignment(assignment);
-    if (assignment.isExam) {
-      navigate(`/student/exams/${assignment.id}`);
-    } else {
-      setOpenSubmissionDialog(true);
-    }
-    handleMenuClose();
   };
 
   const handleViewComments = (assignment) => {
@@ -244,11 +330,12 @@ const StudentAssignments = () => {
     if (!assignment) return 'Chưa nộp';
     if (assignment.status === 'graded') return 'Đã chấm';
     if (assignment.mySubmission && assignment.mySubmission.status === 'submitted') return 'Đã nộp';
-    if (new Date(assignment.deadline) < new Date()) return 'Quá hạn';
+    if (assignment.isOverdue) return 'Quá hạn';
     return 'Chưa nộp';
   };
 
   const getDaysUntilDeadline = (deadline) => {
+    if (!deadline) return 0;
     const today = new Date();
     const deadlineDate = new Date(deadline);
     const diffTime = deadlineDate - today;
@@ -345,39 +432,43 @@ const StudentAssignments = () => {
                   </Typography>
 
                   <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                    <Chip
-                      label={assignment.isExam ? 'Kỳ thi' : 'Bài tập'}
-                      color={assignment.isExam ? 'error' : 'primary'}
-                      size="small"
-                    />
-                    <Chip
-                      label={getStatusText(assignment)}
-                      color={getStatusColor(assignment.status)}
-                      size="small"
-                    />
-                    <Chip
-                      icon={<Schedule />}
-                      label={`Hạn: ${assignment.deadline}`}
-                      size="small"
-                      color={getDaysUntilDeadline(assignment.deadline) <= 1 ? 'error' : 'default'}
-                    />
-                    {assignment.isExam && (
-                      <>
+                  <Chip
+                    label={assignment.isExam ? 'Kỳ thi' : 'Bài tập'}
+                    color={assignment.isExam ? 'error' : 'primary'}
+                    size="small"
+                  />
+                  <Chip
+                    label={getStatusText(assignment)}
+                    color={getStatusColor(assignment.isOverdue ? 'overdue' : assignment.status)}
+                    size="small"
+                  />
+                  <Chip
+                    icon={<Schedule />}
+                    label={`Hạn: ${formatDate(assignment.deadline)}`}
+                    size="small"
+                    color={assignment.isOverdue ? 'error' : (getDaysUntilDeadline(assignment.deadline) <= 1 ? 'warning' : 'default')}
+                  />
+                  {assignment.isExam && (
+                    <>
+                      {assignment.startAt && (
                         <Chip
-                          label={`Bắt đầu: ${assignment.startAt}`}
+                          label={`Bắt đầu: ${formatDateTime(assignment.startAt)}`}
                           size="small"
                           variant="outlined"
                         />
+                      )}
+                      {assignment.durationMinutes && (
                         <Chip
                           label={`Thời lượng: ${assignment.durationMinutes} phút`}
                           size="small"
                           variant="outlined"
                         />
-                        {assignment.requireMonitoring && (
-                          <Chip label="Giám sát" size="small" color="warning" />
-                        )}
-                      </>
-                    )}
+                      )}
+                      {assignment.requireMonitoring && (
+                        <Chip label="Giám sát" size="small" color="warning" />
+                      )}
+                    </>
+                  )}
                   </Box>
 
                   {assignment.grade && (
@@ -420,16 +511,27 @@ const StudentAssignments = () => {
                       size="small"
                       variant="contained"
                       startIcon={<Upload />}
-                      onClick={() => handleSubmitAssignment(assignment)}
-                      disabled={new Date(assignment.deadline) < new Date()}
+                      onClick={() => handleSubmitAssignment(assignment, { closeMenu: false })}
+                      disabled={assignment.isExam ? getExamPhase(assignment) === 'ended' : assignment.isOverdue}
                     >
-                    {assignment.isExam ? 'Vào thi' : 'Nộp bài'}
+                      {assignment.isExam
+                        ? getExamPhase(assignment) === 'waiting'
+                          ? 'Chờ thi'
+                          : getExamPhase(assignment) === 'ended'
+                            ? 'Đã kết thúc'
+                            : 'Vào thi'
+                        : assignment.isOverdue
+                          ? 'Đã quá hạn'
+                          : 'Nộp bài'}
                     </Button>
                   ) : (
                     <Button
                       size="small"
                       startIcon={<Visibility />}
-                      onClick={() => handleSubmitAssignment(assignment)}
+                      onClick={() => {
+                        setSelectedAssignment(assignment);
+                        setOpenSubmissionDialog(true);
+                      }}
                     >
                       Xem bài nộp
                     </Button>
@@ -487,7 +589,7 @@ const StudentAssignments = () => {
                   <Button
                     variant="contained"
                     startIcon={<Upload />}
-                    onClick={(e) => { e.stopPropagation(); handleSubmitAssignment(assignment); }}
+                    onClick={(e) => { e.stopPropagation(); handleSubmitAssignment(assignment, { closeMenu: false }); }}
                   >
                     {assignment.isExam ? 'Vào thi' : 'Nộp bài ngay'}
                   </Button>
@@ -535,7 +637,11 @@ const StudentAssignments = () => {
                   <Button
                     size="small"
                     startIcon={<Visibility />}
-                    onClick={(e) => { e.stopPropagation(); handleSubmitAssignment(assignment); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedAssignment(assignment);
+                      setOpenSubmissionDialog(true);
+                    }}
                   >
                     Xem bài nộp
                   </Button>
@@ -597,7 +703,11 @@ const StudentAssignments = () => {
                   <Button
                     size="small"
                     startIcon={<Visibility />}
-                    onClick={(e) => { e.stopPropagation(); handleSubmitAssignment(assignment); }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedAssignment(assignment);
+                      setOpenSubmissionDialog(true);
+                    }}
                   >
                     Xem chi tiết điểm
                   </Button>
@@ -621,7 +731,15 @@ const StudentAssignments = () => {
         open={Boolean(anchorEl)}
         onClose={handleMenuClose}
       >
-        <MenuItem onClick={() => handleSubmitAssignment(selectedItemForMenu)}>
+        <MenuItem
+          disabled={
+            !selectedItemForMenu ||
+            (selectedItemForMenu?.isExam
+              ? getExamPhase(selectedItemForMenu) === 'ended'
+              : selectedItemForMenu?.isOverdue)
+          }
+          onClick={() => handleSubmitAssignment(selectedItemForMenu)}
+        >
           <Upload sx={{ mr: 1 }} />
           Nộp bài
         </MenuItem>
@@ -942,7 +1060,7 @@ const StudentAssignments = () => {
                 Hạn nộp:
               </Typography>
               <Typography variant="body2">
-                {selectedAssignment?.deadline}
+                {formatDate(selectedAssignment?.deadline)}
               </Typography>
             </Grid>
             {selectedAssignment?.isExam && (
@@ -952,7 +1070,7 @@ const StudentAssignments = () => {
                     Thời gian bắt đầu:
                   </Typography>
                   <Typography variant="body2">
-                    {selectedAssignment?.startAt}
+                    {formatDateTime(selectedAssignment?.startAt)}
                   </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
@@ -1049,18 +1167,75 @@ const StudentAssignments = () => {
           <Button onClick={() => setOpenDetailDialog(false)}>
             Đóng
           </Button>
-          {selectedAssignment?.mySubmission.status === 'not_submitted' && new Date(selectedAssignment.deadline) >= new Date() && (
-            <Button
-              variant="contained"
-              startIcon={<Upload />}
-              onClick={() => {
-                setOpenDetailDialog(false);
-                handleSubmitAssignment(selectedAssignment);
-              }}
-            >
-              {selectedAssignment.isExam ? 'Vào thi' : 'Nộp bài'}
-            </Button>
+          {selectedAssignment?.mySubmission.status === 'not_submitted' && (
+            (() => {
+              const phase = getExamPhase(selectedAssignment);
+              const canAttempt = selectedAssignment.isExam ? phase !== 'ended' : !selectedAssignment.isOverdue;
+              if (!canAttempt) return null;
+              const label = selectedAssignment.isExam
+                ? phase === 'waiting'
+                  ? 'Chờ thi'
+                  : phase === 'ended'
+                    ? 'Đã kết thúc'
+                    : 'Vào thi'
+                : 'Nộp bài';
+              return (
+                <Button
+                  variant="contained"
+                  startIcon={<Upload />}
+                  onClick={() => {
+                    setOpenDetailDialog(false);
+                    handleSubmitAssignment(selectedAssignment, { closeMenu: false });
+                  }}
+                >
+                  {label}
+                </Button>
+              );
+            })()
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Exam Waiting Dialog */}
+      <Dialog
+        open={openExamWaitingDialog}
+        onClose={() => setOpenExamWaitingDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Chưa đến giờ thi</DialogTitle>
+        <DialogContent>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Kỳ thi <strong>{examWaitingInfo?.title}</strong> chưa bắt đầu. Vui lòng chờ tới thời gian được phép.
+          </Alert>
+          <Typography variant="body1" gutterBottom>
+            Thời gian bắt đầu: {formatDateTime(examWaitingInfo?.startAt)}
+          </Typography>
+          <Typography variant="body2" color="text.secondary" gutterBottom>
+            Thời lượng: {examWaitingInfo?.durationMinutes || 0} phút
+          </Typography>
+          {waitingCountdown && (
+            <Box sx={{ mt: 2 }}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Còn lại:
+              </Typography>
+              <Typography variant="h4" color="primary">
+                {waitingCountdown}
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenExamWaitingDialog(false)}>Đóng</Button>
+          <Button
+            variant="contained"
+            onClick={() => {
+              setOpenExamWaitingDialog(false);
+              attemptEnterExam(examWaitingInfo);
+            }}
+          >
+            Thử lại
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

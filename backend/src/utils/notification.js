@@ -1,6 +1,8 @@
-import { NotificationModel } from '../models/Notification.js';
 import mongoose from 'mongoose';
+import { NotificationModel } from '../models/Notification.js';
 import { EnrollmentModel } from '../models/Enrollment.js';
+import { UserModel } from '../models/User.js';
+import { shouldDeliverNotification } from '../constants/notificationSettings.js';
 
 /**
  * Tạo notifications cho tất cả sinh viên trong một lớp
@@ -30,9 +32,22 @@ export async function createClassNotifications(teacherId, classId, type, title, 
       return; // Không có sinh viên nào trong lớp
     }
 
-    // Tạo notifications cho từng sinh viên
-    const notifications = enrollments.map(enrollment => ({
-      recipientId: mongoose.Types.ObjectId.isValid(enrollment.studentId) ? enrollment.studentId : mongoose.Types.ObjectId(enrollment.studentId),
+    const studentIds = enrollments.map(enrollment => enrollment.studentId);
+    const students = await UserModel.find({ _id: { $in: studentIds } })
+      .select('_id notificationSettings')
+      .lean();
+
+    const allowedStudentIds = students
+      .filter(student => shouldDeliverNotification(student.notificationSettings, type))
+      .map(student => student._id.toString());
+
+    if (allowedStudentIds.length === 0) {
+      console.log(`No students opted in for notification type ${type} in class ${classId}`);
+      return;
+    }
+
+    const notifications = allowedStudentIds.map(studentId => ({
+      recipientId: mongoose.Types.ObjectId.isValid(studentId) ? studentId : mongoose.Types.ObjectId(studentId),
       senderId: mongoose.Types.ObjectId.isValid(teacherId) ? teacherId : mongoose.Types.ObjectId(teacherId),
       classId: mongoose.Types.ObjectId.isValid(classId) ? classId : mongoose.Types.ObjectId(classId),
       type,
@@ -44,7 +59,8 @@ export async function createClassNotifications(teacherId, classId, type, title, 
         documentId: metadata.documentId && mongoose.Types.ObjectId.isValid(metadata.documentId) ? metadata.documentId : (metadata.documentId ? mongoose.Types.ObjectId(metadata.documentId) : undefined),
         announcementId: metadata.announcementId && mongoose.Types.ObjectId.isValid(metadata.announcementId) ? metadata.announcementId : (metadata.announcementId ? mongoose.Types.ObjectId(metadata.announcementId) : undefined),
       },
-      isRead: false
+      isRead: false,
+      readAt: null
     }));
 
     if (notifications.length > 0) {
@@ -75,6 +91,17 @@ export async function createStudentNotification(teacherId, studentId, classId, t
       return;
     }
 
+    const student = await UserModel.findById(studentId).select('notificationSettings').lean();
+    if (!student) {
+      console.warn(`Student ${studentId} not found for notification`);
+      return;
+    }
+
+    if (!shouldDeliverNotification(student.notificationSettings, type)) {
+      console.log(`Student ${studentId} opted out of notification type ${type}`);
+      return;
+    }
+
     await NotificationModel.create({
       recipientId: mongoose.Types.ObjectId.isValid(studentId) ? studentId : mongoose.Types.ObjectId(studentId),
       senderId: mongoose.Types.ObjectId.isValid(teacherId) ? teacherId : mongoose.Types.ObjectId(teacherId),
@@ -88,7 +115,8 @@ export async function createStudentNotification(teacherId, studentId, classId, t
         documentId: metadata.documentId && mongoose.Types.ObjectId.isValid(metadata.documentId) ? metadata.documentId : (metadata.documentId ? mongoose.Types.ObjectId(metadata.documentId) : undefined),
         announcementId: metadata.announcementId && mongoose.Types.ObjectId.isValid(metadata.announcementId) ? metadata.announcementId : (metadata.announcementId ? mongoose.Types.ObjectId(metadata.announcementId) : undefined),
       },
-      isRead: false
+      isRead: false,
+      readAt: null
     });
     console.log(`Created notification for student ${studentId}, type: ${type}`);
   } catch (error) {

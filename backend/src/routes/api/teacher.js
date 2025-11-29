@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import { authRequired } from '../../middleware/auth.js';
 import { ClassModel } from '../../models/Class.js';
 import { AssignmentModel } from '../../models/Assignment.js';
@@ -21,6 +22,11 @@ teacherRouter.use(authRequired(['teacher']));
 teacherRouter.get('/dashboard', async (req, res) => {
   const teacherId = req.user.id;
   const classIds = await ClassModel.find({ teacherId }).distinct('_id');
+
+  // Get teacher's last notification read timestamp
+  const user = await UserModel.findById(teacherId).select('lastNotificationReadAt teacherReadNotificationIds').lean();
+  const lastReadAt = user?.lastNotificationReadAt ? new Date(user.lastNotificationReadAt) : null;
+  const readNotificationIds = new Set(user?.teacherReadNotificationIds || []);
 
   const [classesCount, assignmentsCount, examsCount, assignmentStats] = await Promise.all([
     ClassModel.countDocuments({ teacherId }),
@@ -73,38 +79,60 @@ teacherRouter.get('/dashboard', async (req, res) => {
   for (const stat of assignmentStats) {
     if (stat.submittedCount < stat.totalStudents) {
       const pending = stat.totalStudents - stat.submittedCount;
-      const assignment = await AssignmentModel.findById(stat._id).lean();
+      const assignment = await AssignmentModel.findById(stat._id).populate('classId', 'name').lean();
       if (assignment) {
+        const notificationId = `unsubmitted-${stat._id}`;
+        const isRead = readNotificationIds.has(notificationId) || (lastReadAt && new Date(assignment.dueDate) <= lastReadAt);
         notifications.push({
-          id: `unsubmitted-${stat._id}`,
+          id: notificationId,
           title: `${pending} sinh viên chưa nộp "${assignment.title}"`,
           time: 'Gần đây',
           type: 'warning',
           content: `Bài tập "${assignment.title}" có ${pending} sinh viên chưa nộp. Hạn nộp: ${new Date(assignment.dueDate).toLocaleDateString('vi-VN')}.`,
           assignmentId: String(stat._id),
-          pendingCount: pending
+          pendingCount: pending,
+          sender: 'Hệ thống',
+          class: assignment.classId?.name || 'Unknown Class',
+          isRead: isRead
         });
       }
     }
   }
 
   // Recent submissions notifications
+  const assignmentIdsForSubmissions = await AssignmentModel.find({ classId: { $in: classIds } }).distinct('_id');
   const recentSubmissions = await SubmissionModel.find({
-    assignmentId: { $in: classIds },
+    assignmentId: { $in: assignmentIdsForSubmissions },
     createdAt: { $gte: new Date(Date.now() - 24 * 3600 * 1000) } // Last 24 hours
-  }).sort({ createdAt: -1 }).limit(5).populate('assignmentId', 'title').populate('studentId', 'fullName').lean();
+  })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .populate('studentId', 'fullName')
+    .populate({
+      path: 'assignmentId',
+      select: 'title classId',
+      populate: { path: 'classId', select: 'name' }
+    })
+    .lean();
 
   for (const sub of recentSubmissions) {
-    notifications.push({
-      id: `submission-${sub._id}`,
-      title: `${sub.studentId?.fullName || 'Sinh viên'} đã nộp "${sub.assignmentId?.title || 'Bài tập'}"`,
-      time: 'Gần đây',
-      type: 'success',
-      content: `${sub.studentId?.fullName || 'Sinh viên'} vừa nộp bài tập "${sub.assignmentId?.title || 'Bài tập'}" lúc ${new Date(sub.submittedAt).toLocaleString('vi-VN')}.`,
-      submissionId: String(sub._id),
-      studentName: sub.studentId?.fullName,
-      assignmentTitle: sub.assignmentId?.title
-    });
+    if (sub.assignmentId && sub.assignmentId.classId) {
+      const notificationId = `submission-${sub._id}`;
+      const isRead = readNotificationIds.has(notificationId) || (lastReadAt && new Date(sub.createdAt) <= lastReadAt);
+      notifications.push({
+        id: notificationId,
+        title: `${sub.studentId?.fullName || 'Sinh viên'} đã nộp "${sub.assignmentId?.title || 'Bài tập'}"`,
+        time: 'Gần đây',
+        type: 'success',
+        content: `${sub.studentId?.fullName || 'Sinh viên'} vừa nộp bài tập "${sub.assignmentId?.title || 'Bài tập'}" lúc ${new Date(sub.submittedAt || sub.createdAt).toLocaleString('vi-VN')}.`,
+        submissionId: String(sub._id),
+        studentName: sub.studentId?.fullName,
+        assignmentTitle: sub.assignmentId?.title,
+        isRead: isRead,
+        sender: sub.studentId?.fullName || 'Sinh viên',
+        class: sub.assignmentId.classId?.name || 'Unknown Class'
+      });
+    }
   }
 
   // Upcoming exams
@@ -112,43 +140,82 @@ teacherRouter.get('/dashboard', async (req, res) => {
     classId: { $in: classIds },
     isExam: true,
     dueDate: { $gte: new Date(), $lte: new Date(Date.now() + 7 * 24 * 3600 * 1000) } // Next 7 days
-  }).sort({ dueDate: 1 }).limit(3).lean();
+  })
+    .populate('classId', 'name')
+    .sort({ dueDate: 1 })
+    .limit(3)
+    .lean();
 
   for (const exam of upcomingExams) {
+    const notificationId = `exam-${exam._id}`;
+    const isRead = readNotificationIds.has(notificationId) || (lastReadAt && new Date(exam.dueDate) <= lastReadAt);
     notifications.push({
-      id: `exam-${exam._id}`,
+      id: notificationId,
       title: `Bài thi "${exam.title}" sắp đến`,
       time: 'Gần đây',
       type: 'info',
       content: `Bài thi "${exam.title}" sẽ diễn ra vào ${new Date(exam.dueDate).toLocaleString('vi-VN')}. Thời gian: ${exam.durationMinutes} phút.`,
       examId: String(exam._id),
       examTitle: exam.title,
-      examDate: exam.dueDate
+      examDate: exam.dueDate,
+      sender: 'Hệ thống',
+      class: exam.classId?.name || 'Unknown Class',
+      isRead: isRead
     });
   }
 
-  // Schedule: upcoming assignments
+  // Schedule: assignments due today
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const todayEnd = new Date();
+  todayEnd.setHours(23, 59, 59, 999);
+  
   const schedule = await AssignmentModel.find({
     classId: { $in: classIds },
-    dueDate: { $gte: new Date() }
-  }).sort({ dueDate: 1 }).limit(5).populate('classId', 'name code').lean();
+    dueDate: { $gte: todayStart, $lte: todayEnd }
+  }).sort({ dueDate: 1 }).populate('classId', 'name code').lean();
+
+  // Get submission counts for each assignment
+  const assignmentIds = schedule.map(a => a._id);
+  let submissionCountMap = new Map();
+  if (assignmentIds.length > 0) {
+    const submissionCounts = await SubmissionModel.aggregate([
+      { $match: { assignmentId: { $in: assignmentIds } } },
+      { $group: { _id: '$assignmentId', count: { $sum: 1 } } }
+    ]);
+    submissionCountMap = new Map(submissionCounts.map(s => [String(s._id), s.count]));
+  }
+
+  // Get enrollment counts for each class
+  const classIdsForSchedule = [...new Set(schedule.map(a => a.classId?._id).filter(Boolean))];
+  let enrollmentCountMap = new Map();
+  if (classIdsForSchedule.length > 0) {
+    const enrollmentCounts = await EnrollmentModel.aggregate([
+      { $match: { classId: { $in: classIdsForSchedule }, status: 'enrolled' } },
+      { $group: { _id: '$classId', count: { $sum: 1 } } }
+    ]);
+    enrollmentCountMap = new Map(enrollmentCounts.map(e => [String(e._id), e.count]));
+  }
 
   const scheduleData = schedule.map(a => ({
     id: String(a._id),
     time: new Date(a.dueDate).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
     subject: a.title,
-    class: a.classId?.code || 'Unknown',
+    class: a.classId?.name || 'Unknown',
+    classCode: a.classId?.code || 'Unknown',
     description: a.description || 'Không có mô tả',
-    students: 0, // Will be calculated per class
-    duration: a.durationMinutes || 90,
-    topics: [],
-    materials: [],
+    submittedCount: submissionCountMap.get(String(a._id)) || 0,
+    totalStudents: enrollmentCountMap.get(String(a.classId?._id)) || 0,
     dueDate: a.dueDate,
-    isExam: a.isExam
+    isExam: a.isExam || false
   }));
 
   res.json({
-    stats: { classes: classesCount, assignments: assignmentsCount, exams: examsCount },
+    stats: { 
+      classes: classesCount, 
+      assignments: assignmentsCount, 
+      exams: examsCount
+    },
     assignmentData,
     notifications: notifications.slice(0, 10), // Limit to 10 notifications
     schedule: scheduleData
@@ -187,6 +254,7 @@ teacherRouter.get('/classes/:id', async (req, res) => {
   const cls = await ClassModel.findById(id).lean();
   if (!cls) return res.status(404).json({ error: 'NOT_FOUND' });
   if (String(cls.teacherId) !== String(teacherId)) return res.status(403).json({ error: 'FORBIDDEN' });
+  const teacher = await UserModel.findById(cls.teacherId).select('fullName email').lean();
 
   // Get assignments with submission counts
   const assignments = await AssignmentModel.find({ classId: id }).sort({ dueDate: 1 }).lean();
@@ -245,6 +313,7 @@ teacherRouter.get('/classes/:id', async (req, res) => {
     name: cls.name,
     code: cls.code,
     department: cls.department,
+    teacher: teacher?.fullName || 'Giảng viên',
     assignments: assignmentsWithCounts,
     students,
     documents: documentsWithInfo,
@@ -336,8 +405,11 @@ teacherRouter.get('/assignments', async (req, res) => {
       title: a.title,
       description: a.description || '',
       dueDate: a.dueDate,
+      startTime: a.startTime,
+      endTime: a.endTime,
       isExam: !!a.isExam,
       durationMinutes: a.durationMinutes,
+      requireMonitoring: !!a.requireMonitoring,
       classId: String(a.classId),
       className: classData?.name || 'Unknown Class',
       classCode: classData?.code || 'Unknown',
@@ -431,11 +503,45 @@ teacherRouter.put('/submissions/:id/grade', async (req, res) => {
 // Create assignment (teacher-owned class only)
 teacherRouter.post('/assignments', async (req, res) => {
   const teacherId = req.user.id;
-  const { classId, title, dueDate, isExam = false, durationMinutes = null, description = '' } = req.body || {};
+  const {
+    classId,
+    title,
+    dueDate,
+    isExam = false,
+    durationMinutes = null,
+    description = '',
+    startTime = null,
+    requireMonitoring = false
+  } = req.body || {};
   if (!classId || !title || !dueDate) return res.status(400).json({ error: 'MISSING_FIELDS' });
   const cls = await ClassModel.findOne({ _id: classId, teacherId }).lean();
   if (!cls) return res.status(403).json({ error: 'FORBIDDEN' });
-  const created = await AssignmentModel.create({ classId, title, dueDate, isExam: !!isExam, durationMinutes: durationMinutes ?? null, description });
+  const payload = {
+    classId,
+    title,
+    dueDate,
+    isExam: !!isExam,
+    durationMinutes: durationMinutes ?? null,
+    description,
+    requireMonitoring: !!requireMonitoring
+  };
+  if (payload.isExam) {
+    if (startTime) {
+      payload.startTime = startTime;
+    } else {
+      payload.startTime = dueDate;
+    }
+    const baseStart = new Date(payload.startTime);
+    if (payload.durationMinutes) {
+      payload.endTime = new Date(baseStart.getTime() + payload.durationMinutes * 60000);
+    } else {
+      payload.endTime = new Date(baseStart.getTime());
+    }
+  } else {
+    payload.startTime = null;
+    payload.endTime = null;
+  }
+  const created = await AssignmentModel.create(payload);
 
   // Create notifications for all students in the class
   try {
@@ -479,13 +585,33 @@ teacherRouter.put('/assignments/:id', async (req, res) => {
   if (!assignment) return res.status(404).json({ error: 'NOT_FOUND' });
   const owns = await ClassModel.exists({ _id: assignment.classId, teacherId });
   if (!owns) return res.status(403).json({ error: 'FORBIDDEN' });
-  const { title, dueDate, isExam, durationMinutes, description } = req.body || {};
+  const { title, dueDate, isExam, durationMinutes, description, startTime, requireMonitoring } = req.body || {};
   const update = {};
   if (title !== undefined) update.title = title;
   if (dueDate !== undefined) update.dueDate = dueDate;
   if (isExam !== undefined) update.isExam = !!isExam;
   if (durationMinutes !== undefined) update.durationMinutes = durationMinutes;
   if (description !== undefined) update.description = description;
+  if (requireMonitoring !== undefined) update.requireMonitoring = !!requireMonitoring;
+
+  const effectiveIsExam = update.isExam !== undefined ? update.isExam : assignment.isExam;
+  if (effectiveIsExam) {
+    if (startTime !== undefined) {
+      update.startTime = startTime || dueDate || assignment.startTime || assignment.dueDate;
+    } else if (update.dueDate && !update.startTime) {
+      update.startTime = update.dueDate;
+    }
+    const baseStart = new Date(update.startTime || assignment.startTime || assignment.dueDate);
+    const duration = update.durationMinutes !== undefined ? update.durationMinutes : assignment.durationMinutes;
+    if (duration) {
+      update.endTime = new Date(baseStart.getTime() + duration * 60000);
+    } else {
+      update.endTime = new Date(baseStart.getTime());
+    }
+  } else {
+    update.startTime = null;
+    update.endTime = null;
+  }
   const updated = await AssignmentModel.findByIdAndUpdate(id, update, { new: true });
   if (!updated) return res.status(404).json({ error: 'NOT_FOUND' });
   return res.json({ success: true });
@@ -711,6 +837,67 @@ teacherRouter.delete('/announcements/:id', async (req, res) => {
   res.json({ success: true });
 });
 
+// ---- Student Management ----
+
+// Remove student from class
+teacherRouter.delete('/classes/:classId/students/:studentId', async (req, res) => {
+  const { classId, studentId } = req.params;
+  const teacherId = req.user.id;
+
+  // Check if teacher owns the class
+  const cls = await ClassModel.findOne({ _id: classId, teacherId }).lean();
+  if (!cls) return res.status(403).json({ error: 'FORBIDDEN' });
+
+  // Find the student by studentId, _id (if valid ObjectId), or username
+  const queryConditions = [
+    { studentId: studentId },
+    { username: studentId }
+  ];
+  
+  // Only add _id condition if studentId is a valid ObjectId
+  if (mongoose.Types.ObjectId.isValid(studentId)) {
+    queryConditions.push({ _id: studentId });
+  }
+  
+  const student = await UserModel.findOne({
+    $or: queryConditions,
+    role: 'student'
+  }).lean();
+
+  if (!student) {
+    return res.status(404).json({ error: 'STUDENT_NOT_FOUND' });
+  }
+
+  // Remove enrollment
+  const enrollment = await EnrollmentModel.findOneAndDelete({
+    classId: classId,
+    studentId: student._id,
+    status: 'enrolled'
+  });
+
+  if (!enrollment) {
+    return res.status(404).json({ error: 'ENROLLMENT_NOT_FOUND' });
+  }
+
+  // Log activity
+  try {
+    await logUserActivity(
+      teacherId,
+      'teacher',
+      'remove_student',
+      classId,
+      'class',
+      `Removed student ${student.fullName || student.username} from class ${cls.name}`,
+      { studentId: student._id, studentName: student.fullName || student.username, className: cls.name },
+      req
+    );
+  } catch (error) {
+    console.error('Failed to log remove student activity:', error);
+  }
+
+  res.json({ success: true });
+});
+
 // Test file serving
 teacherRouter.get('/test-files', (req, res) => {
   res.json({
@@ -758,6 +945,21 @@ teacherRouter.post('/classes/:id/comments', async (req, res) => {
     content: content.trim()
   });
 
+  // Notify all students in the class about the new comment
+  try {
+    const { createClassNotifications } = await import('../../utils/notification.js');
+    await createClassNotifications(
+      teacherId,
+      id,
+      'comment_created',
+      `Bình luận mới từ ${req.user.fullName || 'Giảng viên'}`,
+      comment.content,
+      { commentId: comment._id }
+    );
+  } catch (error) {
+    console.error('Failed to create comment notifications:', error);
+  }
+
   res.status(201).json({
     id: String(comment._id),
     author: req.user.fullName || 'Giảng viên',
@@ -766,6 +968,168 @@ teacherRouter.post('/classes/:id/comments', async (req, res) => {
     time: 'Vừa xong',
     createdAt: comment.createdAt
   });
+});
+
+// ---- Notifications ----
+
+// Get notifications for teacher header
+teacherRouter.get('/notifications', async (req, res) => {
+  const teacherId = req.user.id;
+  const classIds = await ClassModel.find({ teacherId }).distinct('_id');
+
+  // Get teacher's last notification read timestamp
+  const user = await UserModel.findById(teacherId).select('lastNotificationReadAt teacherReadNotificationIds').lean();
+  const lastReadAt = user?.lastNotificationReadAt ? new Date(user.lastNotificationReadAt) : null;
+  const readNotificationIds = new Set(user?.teacherReadNotificationIds || []);
+
+  const notifications = [];
+
+  // Recent submissions (last 24 hours)
+  const assignmentIds = await AssignmentModel.find({ classId: { $in: classIds } }).distinct('_id');
+  const recentSubmissions = await SubmissionModel.find({
+    assignmentId: { $in: assignmentIds },
+    createdAt: { $gte: new Date(Date.now() - 24 * 3600 * 1000) }
+  })
+    .sort({ createdAt: -1 })
+    .limit(10)
+    .populate('studentId', 'fullName')
+    .populate({
+      path: 'assignmentId',
+      select: 'title classId',
+      populate: { path: 'classId', select: 'name' }
+    })
+    .lean();
+
+  for (const sub of recentSubmissions) {
+    if (sub.assignmentId && sub.assignmentId.classId) {
+      const notificationId = `submission-${sub._id}`;
+      const isRead = readNotificationIds.has(notificationId) || (lastReadAt && new Date(sub.createdAt) <= lastReadAt);
+      notifications.push({
+        id: notificationId,
+        type: 'assignment_submitted',
+        title: `${sub.studentId?.fullName || 'Sinh viên'} đã nộp "${sub.assignmentId?.title || 'Bài tập'}"`,
+        content: `${sub.studentId?.fullName || 'Sinh viên'} vừa nộp bài tập "${sub.assignmentId?.title || 'Bài tập'}" lúc ${new Date(sub.submittedAt || sub.createdAt).toLocaleString('vi-VN')}.`,
+        time: new Date(sub.createdAt).toLocaleString('vi-VN'),
+        class: sub.assignmentId.classId?.name || 'Unknown Class',
+        sender: sub.studentId?.fullName || 'Sinh viên',
+        isRead: isRead,
+        createdAt: sub.createdAt
+      });
+    }
+  }
+
+  // Unsubmitted assignments (pending submissions)
+  const assignments = await AssignmentModel.find({
+    classId: { $in: classIds },
+    dueDate: { $gte: new Date() }
+  })
+    .populate('classId', 'name')
+    .lean();
+
+  for (const assignment of assignments) {
+    const submissionCount = await SubmissionModel.countDocuments({ assignmentId: assignment._id });
+    const enrollmentCount = await EnrollmentModel.countDocuments({
+      classId: assignment.classId,
+      status: 'enrolled'
+    });
+    
+    if (submissionCount < enrollmentCount) {
+      const pending = enrollmentCount - submissionCount;
+      const notificationId = `unsubmitted-${assignment._id}`;
+      const isRead = readNotificationIds.has(notificationId) || (lastReadAt && new Date(assignment.dueDate) <= lastReadAt);
+      notifications.push({
+        id: notificationId,
+        type: 'assignment_pending',
+        title: `${pending} sinh viên chưa nộp "${assignment.title}"`,
+        content: `Bài tập "${assignment.title}" có ${pending} sinh viên chưa nộp. Hạn nộp: ${new Date(assignment.dueDate).toLocaleDateString('vi-VN')}.`,
+        time: new Date(assignment.dueDate).toLocaleString('vi-VN'),
+        class: assignment.classId?.name || 'Unknown Class',
+        sender: 'Hệ thống',
+        isRead: isRead,
+        createdAt: assignment.dueDate
+      });
+    }
+  }
+
+  // Recent comments from students
+  const recentComments = await CommentModel.find({
+    classId: { $in: classIds },
+    userRole: 'student',
+    createdAt: { $gte: new Date(Date.now() - 24 * 3600 * 1000) }
+  })
+    .sort({ createdAt: -1 })
+    .limit(5)
+    .populate('userId', 'fullName')
+    .populate('classId', 'name')
+    .lean();
+
+  for (const comment of recentComments) {
+    const notificationId = `comment-${comment._id}`;
+    const isRead = readNotificationIds.has(notificationId) || (lastReadAt && new Date(comment.createdAt) <= lastReadAt);
+    notifications.push({
+      id: notificationId,
+      type: 'comment_created',
+      title: `${comment.userId?.fullName || 'Sinh viên'} đã bình luận`,
+      content: comment.content.substring(0, 100) + (comment.content.length > 100 ? '...' : ''),
+      time: new Date(comment.createdAt).toLocaleString('vi-VN'),
+      class: comment.classId?.name || 'Unknown Class',
+      sender: comment.userId?.fullName || 'Sinh viên',
+      isRead: isRead,
+      createdAt: comment.createdAt
+    });
+  }
+
+  // Sort by createdAt descending and limit to 20
+  notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  const limitedNotifications = notifications.slice(0, 20);
+
+  res.json(limitedNotifications);
+});
+
+// Mark notification as read
+teacherRouter.post('/notifications/:id/read', async (req, res) => {
+  const { id } = req.params;
+  const teacherId = req.user.id;
+
+  try {
+    // Get current user to check existing read notification IDs
+    const user = await UserModel.findById(teacherId).select('teacherReadNotificationIds').lean();
+    const readIds = new Set(user?.teacherReadNotificationIds || []);
+    
+    // Add this notification ID to the set
+    readIds.add(id);
+    
+    // Update user with new read notification IDs
+    await UserModel.updateOne(
+      { _id: teacherId },
+      { $set: { teacherReadNotificationIds: Array.from(readIds) } }
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({ error: 'Failed to mark notification as read' });
+  }
+});
+
+// Mark all notifications as read
+teacherRouter.post('/notifications/mark-all-read', async (req, res) => {
+  const teacherId = req.user.id;
+
+  try {
+    const now = new Date();
+    
+    // Update lastNotificationReadAt to mark all current notifications as read
+    await UserModel.updateOne(
+      { _id: teacherId },
+      { $set: { lastNotificationReadAt: now } }
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error marking all notifications as read:', error);
+    res.status(500).json({ error: 'Failed to mark all notifications as read' });
+  }
 });
 
 

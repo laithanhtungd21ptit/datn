@@ -12,8 +12,21 @@ export async function apiRequest(path, options = {}) {
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      // Always check localStorage first, then module-level authToken
+      // This ensures we always use the most up-to-date token
       const tokenFromStorage = (typeof localStorage !== 'undefined') ? localStorage.getItem('accessToken') : '';
-      const bearer = authToken || tokenFromStorage || '';
+      const bearer = tokenFromStorage || authToken || '';
+      
+      // Update module-level token if localStorage has a different token
+      if (tokenFromStorage && tokenFromStorage !== authToken) {
+        authToken = tokenFromStorage;
+      }
+      
+      // Debug logging in development
+      if (process.env.NODE_ENV === 'development' && !bearer) {
+        console.warn('No token available for API request to:', path);
+      }
+      
       const headers = { ...(bearer ? { Authorization: `Bearer ${bearer}` } : {}), ...(options.headers || {}) };
 
       // Don't set Content-Type for FormData, let browser set it
@@ -57,7 +70,19 @@ export async function apiRequest(path, options = {}) {
         }
         
         if (response.status === 403) {
-          throw new Error(data?.error || response.statusText);
+          // 403 means token is valid but role/access is denied
+          // This could be a token sync issue - try refreshing from localStorage
+          if (attempt === 0 && typeof localStorage !== 'undefined') {
+            const freshToken = localStorage.getItem('accessToken');
+            if (freshToken && freshToken !== bearer) {
+              // Token exists in storage but wasn't used - retry with fresh token
+              console.warn('403 error, retrying with fresh token from localStorage');
+              authToken = freshToken;
+              continue; // Retry with fresh token
+            }
+          }
+          // Don't retry 403 errors - they indicate permission issues, not transient failures
+          throw new Error(data?.error || 'FORBIDDEN');
         }
 
         // Retry on 5xx errors or 404 (might be cold start)
@@ -161,6 +186,8 @@ export const api = {
   teacherGetAnnouncements: (classId) => apiRequest(`/api/teacher/classes/${classId}/announcements`),
   teacherCreateAnnouncement: (classId, payload) => apiRequest(`/api/teacher/classes/${classId}/announcements`, { method: 'POST', body: JSON.stringify(payload) }),
   teacherDeleteAnnouncement: (id) => apiRequest(`/api/teacher/announcements/${id}`, { method: 'DELETE' }),
+  // Student Management
+  teacherRemoveStudentFromClass: (classId, studentId) => apiRequest(`/api/teacher/classes/${classId}/students/${studentId}`, { method: 'DELETE' }),
   // Comments
   teacherGetComments: (classId) => apiRequest(`/api/teacher/classes/${classId}/comments`),
   teacherCreateComment: (classId, payload) => apiRequest(`/api/teacher/classes/${classId}/comments`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -169,9 +196,16 @@ export const api = {
   studentProfile: () => apiRequest('/api/student/profile'),
   studentUpdateProfile: (payload) => apiRequest('/api/student/profile', { method: 'PUT', body: JSON.stringify(payload) }),
   studentUploadAvatar: (formData) => apiRequest('/api/student/profile/avatar', { method: 'POST', body: formData }),
+  studentGetNotificationSettings: () => apiRequest('/api/student/notifications/settings'),
+  studentUpdateNotificationSettings: (payload) => apiRequest('/api/student/notifications/settings', { method: 'PUT', body: JSON.stringify(payload) }),
   studentNotifications: () => apiRequest('/api/student/notifications'),
   studentMarkNotificationRead: (id) => apiRequest(`/api/student/notifications/${id}/read`, { method: 'POST' }),
   studentMarkAllNotificationsRead: () => apiRequest('/api/student/notifications/mark-all-read', { method: 'POST' }),
+  studentExamDetail: (id) => apiRequest(`/api/student/exams/${id}`),
+  // Teacher Notifications
+  teacherNotifications: () => apiRequest('/api/teacher/notifications'),
+  teacherMarkNotificationRead: (id) => apiRequest(`/api/teacher/notifications/${id}/read`, { method: 'POST' }),
+  teacherMarkAllNotificationsRead: () => apiRequest('/api/teacher/notifications/mark-all-read', { method: 'POST' }),
   // Student Chat
   studentChatContacts: () => apiRequest('/api/student/chat/contacts'),
   studentChatMessages: (userId) => apiRequest(`/api/student/chat/messages/${userId}`),
@@ -190,9 +224,20 @@ export const api = {
     return apiRequest(path);
   },
   chatCreateConversation: (payload) => apiRequest('/api/chat/conversations', { method: 'POST', body: JSON.stringify(payload) }),
-  chatSendMessage: (payload) => apiRequest('/api/chat/messages', { method: 'POST', body: JSON.stringify(payload) }),
+  chatSendMessage: (payload) => {
+    const options = { method: 'POST' };
+    if (payload instanceof FormData) {
+      options.body = payload;
+    } else {
+      options.body = JSON.stringify(payload);
+    }
+    return apiRequest('/api/chat/messages', options);
+  },
   chatRecipients: () => apiRequest('/api/chat/recipients'),
   chatMarkAsRead: (conversationId) => apiRequest(`/api/chat/conversations/${conversationId}/read`, { method: 'POST' }),
+
+  authForgotPassword: (email) => apiRequest('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) }),
+  authResetPassword: (payload) => apiRequest('/api/auth/reset-password', { method: 'POST', body: JSON.stringify(payload) }),
 };
 
 

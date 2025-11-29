@@ -36,6 +36,7 @@ import {
   Visibility,
 } from '@mui/icons-material';
 import { api } from '../../../api/client';
+import ClassNotificationDialog from '../../../components/Teacher/ClassNotificationDialog';
 
 const TeacherClasses = () => {
   const navigate = useNavigate();
@@ -75,7 +76,12 @@ const TeacherClasses = () => {
   const [renameText, setRenameText] = useState('');
   const [openShareDialog, setOpenShareDialog] = useState(false);
   const [openDeleteDialog, setOpenDeleteDialog] = useState(false);
-  const [notificationText, setNotificationText] = useState('');
+  const [notificationForm, setNotificationForm] = useState({
+    title: '',
+    content: '',
+    type: 'general',
+  });
+  const [sendingNotification, setSendingNotification] = useState(false);
 
   const handleMenuClick = (event, classItem) => {
     event.stopPropagation();
@@ -89,12 +95,16 @@ const TeacherClasses = () => {
   };
 
   const handleViewStudents = async (classItem) => {
-    setSelectedClass(classItem);
+    setSelectedClass({ ...classItem, studentList: [] });
     try {
       const classDetail = await api.teacherClassDetail(classItem.id);
-      setSelectedClass({ ...classItem, students: classDetail.students });
+      setSelectedClass({
+        ...classItem,
+        studentList: Array.isArray(classDetail.students) ? classDetail.students : [],
+      });
     } catch (e) {
       console.error('Error loading students:', e);
+      setSelectedClass(prev => ({ ...prev, studentList: [] }));
     }
     setOpenStudentsDialog(true);
     handleMenuClose();
@@ -102,6 +112,11 @@ const TeacherClasses = () => {
 
   const handleSendNotification = (classItem) => {
     setSelectedClass(classItem);
+    setNotificationForm({
+      title: '',
+      content: '',
+      type: 'general',
+    });
     setOpenNotificationDialog(true);
     handleMenuClose();
   };
@@ -142,11 +157,25 @@ const TeacherClasses = () => {
     setOpenDeleteDialog(false);
   };
 
-  const handleSendNotificationSubmit = () => {
-    // Handle send notification
-    console.log('Sending notification:', notificationText, 'to class:', selectedClass.name);
-    setOpenNotificationDialog(false);
-    setNotificationText('');
+  const handleSendNotificationSubmit = async () => {
+    if (
+      !selectedClass ||
+      !notificationForm.title.trim() ||
+      !notificationForm.content.trim()
+    ) {
+      return;
+    }
+    try {
+      setSendingNotification(true);
+      await api.teacherCreateAnnouncement(selectedClass.id, notificationForm);
+      setOpenNotificationDialog(false);
+      setNotificationForm({ title: '', content: '', type: 'general' });
+    } catch (e) {
+      console.error('Error sending notification:', e);
+      setError(e?.message || 'Không thể gửi thông báo');
+    } finally {
+      setSendingNotification(false);
+    }
   };
 
   const [createForm, setCreateForm] = useState({ name: '', code: '', description: '' });
@@ -305,7 +334,7 @@ const TeacherClasses = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-              {(selectedClass?.students || []).map((student) => (
+              {((selectedClass?.studentList && Array.isArray(selectedClass.studentList)) ? selectedClass.studentList : []).map((student) => (
               <TableRow key={student.id}>
               <TableCell>{student.studentId}</TableCell>
               <TableCell>{student.fullName}</TableCell>
@@ -381,43 +410,15 @@ const TeacherClasses = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Notification Dialog */}
-      <Dialog
+      <ClassNotificationDialog
         open={openNotificationDialog}
         onClose={() => setOpenNotificationDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          Gửi thông báo đến lớp {selectedClass?.name}
-        </DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Nội dung thông báo"
-            fullWidth
-            multiline
-            rows={4}
-            variant="outlined"
-            value={notificationText}
-            onChange={(e) => setNotificationText(e.target.value)}
-            placeholder="Nhập nội dung thông báo..."
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenNotificationDialog(false)}>
-            Hủy
-          </Button>
-          <Button
-            onClick={handleSendNotificationSubmit}
-            variant="contained"
-            disabled={!notificationText.trim()}
-          >
-            Gửi thông báo
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onSubmit={handleSendNotificationSubmit}
+        formState={notificationForm}
+        setFormState={setNotificationForm}
+        submitting={sendingNotification}
+        classNameLabel={selectedClass?.name || ''}
+      />
 
       {/* Create Class Dialog */}
       <Dialog

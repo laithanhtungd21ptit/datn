@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authRequired } from '../../middleware/auth.js';
+import { upload } from '../../middleware/upload.js';
 import {
   getConversations,
   getMessages,
@@ -24,7 +25,7 @@ router.get('/conversations/:conversationId/messages', getMessages);
 router.post('/conversations', createConversation);
 
 // Send a message to a conversation
-router.post('/messages', sendMessage);
+router.post('/messages', upload.array('attachments', 5), sendMessage);
 
 // Get allowed recipients for current user
 router.get('/recipients', getAllowedRecipients);

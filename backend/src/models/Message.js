@@ -20,6 +20,16 @@ const MessageSchema = new mongoose.Schema(
       enum: ['text', 'image', 'file'],
       default: 'text'
     },
+    attachments: {
+      type: [{
+        url: { type: String },
+        fileName: { type: String },
+        fileType: { type: String },
+        fileSize: { type: Number },
+        isImage: { type: Boolean, default: false }
+      }],
+      default: []
+    },
     readBy: [{
       userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
       readAt: { type: Date, default: Date.now }

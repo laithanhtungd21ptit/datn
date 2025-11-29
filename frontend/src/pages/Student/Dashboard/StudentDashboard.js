@@ -42,6 +42,8 @@ const StudentDashboard = () => {
   const [selectedGrade, setSelectedGrade] = useState(null);
   const [openExamDialog, setOpenExamDialog] = useState(false);
   const [selectedExam, setSelectedExam] = useState(null);
+  const [showAllExams, setShowAllExams] = useState(false);
+  const [showAllDeadlines, setShowAllDeadlines] = useState(false);
   
 
 
@@ -176,40 +178,21 @@ const StudentDashboard = () => {
         // Update upcoming deadlines (assignments)
         let deadlines = [];
         if (Array.isArray(data?.upcomingDeadlines)) {
-        deadlines = data.upcomingDeadlines.map((d, idx) => ({
-        id: `assignment-${d.id || idx}`,
-        title: d.title,
-        class: d.class || 'Unknown Class',
-        deadline: d.dueDate,
-        daysLeft: Math.ceil((new Date(d.dueDate) - new Date()) / (1000 * 60 * 60 * 24)),
-        status: 'pending',
-        description: d.description || 'Không có mô tả',
-        type: 'assignment',
-          attachments: [], // No attachments from API yet
-            maxGrade: 10,
-          }));
+          deadlines = data.upcomingDeadlines
+            .map((d, idx) => ({
+              id: `assignment-${d.id || idx}`,
+              title: d.title,
+              class: d.class || 'Unknown Class',
+              deadline: d.dueDate,
+              daysLeft: Math.ceil((new Date(d.dueDate) - new Date()) / (1000 * 60 * 60 * 24)),
+              status: 'pending',
+              description: d.description || 'Không có mô tả',
+              type: 'assignment',
+              attachments: [],
+              maxGrade: 10,
+            }))
+            .sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
         }
-
-        // Update upcoming exams
-        if (Array.isArray(data?.upcomingExams)) {
-          const exams = data.upcomingExams.map((exam, idx) => ({
-            id: `exam-${exam.id || idx}`,
-            title: exam.title,
-            class: exam.class || 'Unknown Class',
-            deadline: exam.startAt,
-            daysLeft: Math.ceil((new Date(exam.startAt) - new Date()) / (1000 * 60 * 60 * 24)),
-            status: 'exam',
-            description: exam.description || 'Kỳ thi',
-            type: 'exam',
-            duration: exam.duration,
-            room: exam.room,
-            maxGrade: exam.maxGrade || 10,
-          }));
-          deadlines = [...deadlines, ...exams];
-        }
-
-        // Sort by deadline
-        deadlines.sort((a, b) => new Date(a.deadline) - new Date(b.deadline));
         setUpcomingDeadlines(deadlines);
         if (Array.isArray(data?.grades)) {
           setRecentGrades(data.grades.map((g, idx) => ({
@@ -421,20 +404,27 @@ const StudentDashboard = () => {
 
       <Grid container spacing={{ xs: 2, sm: 3 }}>
         {/* Upcoming Exams */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
+        <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
+          <Paper sx={{ p: { xs: 1.5, sm: 2 }, width: '100%', display: 'flex', flexDirection: 'column' }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
               <Typography 
                 variant="h6" 
                 component="div"
-                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}
+                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' }, flex: 1 }}
               >
                 <Schedule sx={{ mr: 1, verticalAlign: 'middle' }} />
                 Kỳ thi sắp tới
               </Typography>
+              <Button
+                size="small"
+                onClick={() => setShowAllExams(!showAllExams)}
+                sx={{ display: upcomingExams.length > 4 ? 'block' : 'none', ml: 1 }}
+              >
+                {showAllExams ? 'Thu gọn' : `Xem tất cả (${upcomingExams.length})`}
+              </Button>
             </Box>
-            <List>
-              {upcomingExams.map((exam, index) => (
+            <List sx={{ flex: 1 }}>
+              {upcomingExams.slice(0, showAllExams ? upcomingExams.length : 4).map((exam, index) => (
                 <ListItem key={index} divider button onClick={() => handleViewExam(exam)}>
                   <ListItemIcon>
                     <Assignment color="error" />
@@ -445,6 +435,13 @@ const StudentDashboard = () => {
                   />
                 </ListItem>
               ))}
+              {!showAllExams && upcomingExams.length > 4 && (
+                <ListItem>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', width: '100%' }}>
+                    (Còn {upcomingExams.length - 4} kỳ thi khác)
+                  </Typography>
+                </ListItem>
+              )}
             </List>
           </Paper>
         </Grid>
@@ -452,34 +449,39 @@ const StudentDashboard = () => {
 
 
         {/* Upcoming Deadlines */}
-        <Grid item xs={12} md={6}>
-          <Paper sx={{ p: { xs: 1.5, sm: 2 } }}>
-            <Typography variant="h6" component="div" gutterBottom>
-              <AccessTime sx={{ mr: 1, verticalAlign: 'middle' }} />
-              Deadline sắp tới
-            </Typography>
-            <List>
-            {upcomingDeadlines.map((deadline) => (
-            <ListItem key={deadline.id} divider button onClick={() => handleViewDeadline(deadline)}>
-            <ListItemIcon>
-            {deadline.type === 'exam' ? (
-                <Schedule color="error" />
-              ) : (
-              <Assignment color="warning" />
-            )}
-            </ListItemIcon>
-            <ListItemText
-            primary={
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="body2">{deadline.title}</Typography>
-                  <Chip
-                      label={deadline.type === 'exam' ? 'Kỳ thi' : 'Bài tập'}
-                        size="small"
-                          color={deadline.type === 'exam' ? 'error' : 'primary'}
-                        />
+        <Grid item xs={12} md={6} sx={{ display: 'flex' }}>
+          <Paper sx={{ p: { xs: 1.5, sm: 2 }, width: '100%', display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography 
+                variant="h6" 
+                component="div"
+                sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' }, flex: 1 }}
+              >
+                <AccessTime sx={{ mr: 1, verticalAlign: 'middle' }} />
+                Deadline sắp tới
+              </Typography>
+              <Button
+                size="small"
+                onClick={() => setShowAllDeadlines(!showAllDeadlines)}
+                sx={{ display: upcomingDeadlines.length > 4 ? 'block' : 'none', ml: 1 }}
+              >
+                {showAllDeadlines ? 'Thu gọn' : `Xem tất cả (${upcomingDeadlines.length})`}
+              </Button>
+            </Box>
+            <List sx={{ flex: 1 }}>
+              {upcomingDeadlines.slice(0, showAllDeadlines ? upcomingDeadlines.length : 4).map((deadline) => (
+                <ListItem key={deadline.id} divider button onClick={() => handleViewDeadline(deadline)}>
+                  <ListItemIcon>
+                    <Assignment color="warning" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Typography variant="body2">{deadline.title}</Typography>
+                        <Chip label="Bài tập" size="small" color="primary" />
                       </Box>
                     }
-                    secondary={`${deadline.class} - ${deadline.type === 'exam' ? 'Bắt đầu' : 'Hạn'}: ${new Date(deadline.deadline).toLocaleDateString('vi-VN')}`}
+                    secondary={`${deadline.class} - Hạn: ${new Date(deadline.deadline).toLocaleDateString('vi-VN')}`}
                   />
                   <Chip
                     label={`${deadline.daysLeft} ngày`}
@@ -488,6 +490,13 @@ const StudentDashboard = () => {
                   />
                 </ListItem>
               ))}
+              {!showAllDeadlines && upcomingDeadlines.length > 4 && (
+                <ListItem>
+                  <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', textAlign: 'center', width: '100%' }}>
+                    (Còn {upcomingDeadlines.length - 4} deadline khác)
+                  </Typography>
+                </ListItem>
+              )}
             </List>
           </Paper>
         </Grid>
@@ -656,73 +665,49 @@ const StudentDashboard = () => {
         fullWidth
       >
         <DialogTitle>
-        Chi tiết {selectedDeadline?.type === 'exam' ? 'kỳ thi' : 'bài tập'} - {selectedDeadline?.title}
+          Chi tiết bài tập - {selectedDeadline?.title}
         </DialogTitle>
         <DialogContent>
-        <Box sx={{ mb: 3 }}>
-        <Typography variant="h6" gutterBottom>
-        {selectedDeadline?.title}
-        </Typography>
-        <Typography variant="body2" color="text.secondary" gutterBottom>
-        {selectedDeadline?.class}
-        </Typography>
-        <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
-        <Chip
-            label={selectedDeadline?.type === 'exam' ? 'Kỳ thi' : 'Bài tập'}
-              color={selectedDeadline?.type === 'exam' ? 'error' : 'primary'}
-                size="small"
-              />
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              {selectedDeadline?.title}
+            </Typography>
+            <Typography variant="body2" color="text.secondary" gutterBottom>
+              {selectedDeadline?.class}
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1, mb: 1 }}>
+              <Chip label="Bài tập" color="primary" size="small" />
             </Box>
           </Box>
 
           <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" gutterBottom>
-          {selectedDeadline?.type === 'exam' ? 'Mô tả kỳ thi:' : 'Mô tả bài tập:'}
-          </Typography>
-          <Typography variant="body1" sx={{ mb: 2 }}>
-          {selectedDeadline?.description}
-          </Typography>
+            <Typography variant="subtitle1" gutterBottom>
+              Mô tả bài tập:
+            </Typography>
+            <Typography variant="body1" sx={{ mb: 2 }}>
+              {selectedDeadline?.description}
+            </Typography>
           </Box>
 
           <Grid container spacing={2} sx={{ mb: 3 }}>
-          <Grid item xs={12} sm={6}>
-          <Typography variant="subtitle2" color="text.secondary">
-          {selectedDeadline?.type === 'exam' ? 'Thời gian bắt đầu:' : 'Hạn nộp:'}
-          </Typography>
-          <Typography variant="body2">
-          {new Date(selectedDeadline?.deadline).toLocaleString('vi-VN')}
-          </Typography>
-          </Grid>
-          <Grid item xs={12} sm={6}>
-          <Typography variant="subtitle2" color="text.secondary">
-          Còn lại:
-          </Typography>
-          <Chip
-          label={`${selectedDeadline?.daysLeft} ngày`}
-          color={getDeadlineStatusColor(selectedDeadline?.daysLeft)}
-          size="small"
-          />
-          </Grid>
-          {selectedDeadline?.type === 'exam' && selectedDeadline?.duration && (
-          <Grid item xs={12} sm={6}>
-          <Typography variant="subtitle2" color="text.secondary">
-              Thời lượng:
-            </Typography>
-          <Typography variant="body2">
-              {selectedDeadline.duration} phút
+            <Grid item xs={12} sm={6}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Hạn nộp:
               </Typography>
-              </Grid>
-            )}
-            {selectedDeadline?.type === 'exam' && selectedDeadline?.room && (
-              <Grid item xs={12} sm={6}>
-                <Typography variant="subtitle2" color="text.secondary">
-                  Phòng thi:
-                </Typography>
-                <Typography variant="body2">
-                  {selectedDeadline.room}
-                </Typography>
-              </Grid>
-            )}
+              <Typography variant="body2">
+                {new Date(selectedDeadline?.deadline).toLocaleString('vi-VN')}
+              </Typography>
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <Typography variant="subtitle2" color="text.secondary">
+                Còn lại:
+              </Typography>
+              <Chip
+                label={`${selectedDeadline?.daysLeft} ngày`}
+                color={getDeadlineStatusColor(selectedDeadline?.daysLeft)}
+                size="small"
+              />
+            </Grid>
             <Grid item xs={12} sm={6}>
               <Typography variant="subtitle2" color="text.secondary">
                 Điểm tối đa:

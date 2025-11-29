@@ -22,7 +22,7 @@ import {
   CheckCircle,
   Security
 } from '@mui/icons-material';
-import { apiRequest } from '../../api/client';
+import { api } from '../../api/client';
 
 const ForgotPassword = () => {
   const [email, setEmail] = useState('');
@@ -30,7 +30,10 @@ const ForgotPassword = () => {
   const [error, setError] = useState('');
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [step, setStep] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const navigate = useNavigate();
 
   const steps = ['Nhập email', 'Xác nhận token', 'Đặt mật khẩu mới'];
@@ -39,13 +42,19 @@ const ForgotPassword = () => {
     e.preventDefault();
     setError('');
     setInfo('');
+    if (!email) {
+      setError('Vui lòng nhập email.');
+      return;
+    }
+    setLoading(true);
     try {
-      const res = await apiRequest('/api/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+      await api.authForgotPassword(email);
       setInfo('Mã xác nhận đã được gửi đến email của bạn. Vui lòng kiểm tra hộp thư.');
-      if (res?.resetToken) setResetToken(res.resetToken);
       setStep(1);
     } catch (err) {
       setError(err?.message || 'Lỗi gửi yêu cầu');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -53,13 +62,32 @@ const ForgotPassword = () => {
     e.preventDefault();
     setError('');
     setInfo('');
+    if (!resetToken) {
+      setError('Vui lòng nhập mã xác nhận.');
+      return;
+    }
+    if (!newPassword || !confirmPassword) {
+      setError('Vui lòng nhập đầy đủ mật khẩu mới.');
+      return;
+    }
+    if (newPassword.length < 8) {
+      setError('Mật khẩu mới phải có ít nhất 8 ký tự.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('Mật khẩu mới không khớp.');
+      return;
+    }
+    setResetting(true);
     try {
-      await apiRequest('/api/auth/reset-password', { method: 'POST', body: JSON.stringify({ token: resetToken, newPassword }) });
+      await api.authResetPassword({ token: resetToken, newPassword });
       setInfo('Đặt lại mật khẩu thành công. Vui lòng đăng nhập.');
       setStep(2);
       setTimeout(() => navigate('/login'), 2000);
     } catch (err) {
       setError(err?.message || 'Không thể đặt lại mật khẩu');
+    } finally {
+      setResetting(false);
     }
   };
 
@@ -146,8 +174,9 @@ const ForgotPassword = () => {
                     fullWidth
                     sx={{ mt: 3 }}
                     startIcon={<Email />}
+                    disabled={loading}
                   >
-                    Gửi mã xác nhận
+                    {loading ? 'Đang gửi...' : 'Gửi mã xác nhận'}
                   </Button>
                 </Box>
               </CardContent>
@@ -188,14 +217,27 @@ const ForgotPassword = () => {
                       startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary' }} />
                     }}
                   />
+                  <TextField
+                    fullWidth
+                    label="Xác nhận mật khẩu mới"
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    required
+                    margin="normal"
+                    InputProps={{
+                      startAdornment: <Lock sx={{ mr: 1, color: 'text.secondary' }} />
+                    }}
+                  />
                   <Button 
                     type="submit" 
                     variant="contained" 
                     fullWidth
                     sx={{ mt: 3 }}
                     startIcon={<Lock />}
+                    disabled={resetting}
                   >
-                    Đặt lại mật khẩu
+                    {resetting ? 'Đang xử lý...' : 'Đặt lại mật khẩu'}
                   </Button>
                 </Box>
               </CardContent>

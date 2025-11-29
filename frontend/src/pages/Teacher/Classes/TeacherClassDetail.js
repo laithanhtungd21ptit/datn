@@ -52,6 +52,7 @@ import {
   Save,
 } from '@mui/icons-material';
 import { api } from '../../../api/client';
+import ClassNotificationDialog from '../../../components/Teacher/ClassNotificationDialog';
 
 const TeacherClassDetail = () => {
   const { id } = useParams();
@@ -100,6 +101,7 @@ const TeacherClassDetail = () => {
     content: '',
     type: 'general'
   });
+  const [sendingNotification, setSendingNotification] = useState(false);
 
   const handleRemoveStudent = (student) => {
     setStudentToRemove(student);
@@ -120,8 +122,7 @@ const TeacherClassDetail = () => {
 
   const handleConfirmRemove = async () => {
     try {
-      // Mock API call - trong thực tế sẽ gọi api.teacherRemoveStudentFromClass(classData.id, studentToRemove.id)
-      console.log('Removing student:', studentToRemove.id, 'from class:', classData.id);
+      await api.teacherRemoveStudentFromClass(classData.id, studentToRemove.id);
       
       // Cập nhật danh sách sinh viên
       setClassData(prev => ({
@@ -219,9 +220,10 @@ const TeacherClassDetail = () => {
   };
 
   const handleAnnouncementSubmit = async () => {
-    if (!newAnnouncement.title || !newAnnouncement.content) return;
+    if (!newAnnouncement.title.trim() || !newAnnouncement.content.trim()) return;
 
     try {
+      setSendingNotification(true);
       const announcement = await api.teacherCreateAnnouncement(id, newAnnouncement);
 
       // Update local state
@@ -234,6 +236,8 @@ const TeacherClassDetail = () => {
       setNewAnnouncement({ title: '', content: '', type: 'general' });
     } catch (e) {
       setError(e?.message || 'Không thể tạo thông báo');
+    } finally {
+      setSendingNotification(false);
     }
   };
 
@@ -259,6 +263,7 @@ const TeacherClassDetail = () => {
           id: data.id,
           name: data.name,
           code: data.code,
+          teacher: data.teacher || '',
           students: (data.students || []).map(s => ({ id: s.id, name: s.name || s.id, email: s.email || '' })),
           assignments: data.assignments || [],
           documents: data.documents || [],
@@ -751,60 +756,15 @@ const TeacherClassDetail = () => {
       </Dialog>
 
       {/* Announcement Create Dialog */}
-      <Dialog
+      <ClassNotificationDialog
         open={openAnnouncementDialog}
         onClose={() => setOpenAnnouncementDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Tạo thông báo mới</DialogTitle>
-        <DialogContent>
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Tiêu đề thông báo"
-            fullWidth
-            variant="outlined"
-            value={newAnnouncement.title}
-            onChange={(e) => setNewAnnouncement(prev => ({ ...prev, title: e.target.value }))}
-            sx={{ mb: 2 }}
-          />
-          <TextField
-            margin="dense"
-            label="Nội dung thông báo"
-            fullWidth
-            variant="outlined"
-            multiline
-            rows={4}
-            value={newAnnouncement.content}
-            onChange={(e) => setNewAnnouncement(prev => ({ ...prev, content: e.target.value }))}
-            sx={{ mb: 2 }}
-          />
-          <FormControl fullWidth>
-            <InputLabel>Loại thông báo</InputLabel>
-            <Select
-              value={newAnnouncement.type}
-              onChange={(e) => setNewAnnouncement(prev => ({ ...prev, type: e.target.value }))}
-              label="Loại thông báo"
-            >
-              <MenuItem value="general">Thông báo chung</MenuItem>
-              <MenuItem value="assignment">Bài tập</MenuItem>
-              <MenuItem value="exam">Bài thi</MenuItem>
-              <MenuItem value="important">Quan trọng</MenuItem>
-            </Select>
-          </FormControl>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setOpenAnnouncementDialog(false)}>Hủy</Button>
-          <Button
-            variant="contained"
-            onClick={handleAnnouncementSubmit}
-            disabled={!newAnnouncement.title || !newAnnouncement.content}
-          >
-            Tạo thông báo
-          </Button>
-        </DialogActions>
-      </Dialog>
+        onSubmit={handleAnnouncementSubmit}
+        formState={newAnnouncement}
+        setFormState={setNewAnnouncement}
+        submitting={sendingNotification}
+        classNameLabel={classData?.name || ''}
+      />
 
       {/* Edit Assignment Dialog */}
       <Dialog

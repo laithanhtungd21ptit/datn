@@ -1,44 +1,54 @@
 import nodemailer from 'nodemailer';
 
-// Create transporter
-const transporter = nodemailer.createTransporter({
+const smtpPort = Number(process.env.SMTP_PORT || 587);
+
+const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: process.env.SMTP_PORT || 587,
-  secure: false, // true for 465, false for other ports
-  auth: {
-    user: process.env.SMTP_USER, // Gmail address
-    pass: process.env.SMTP_PASS  // Gmail app password
-  }
+  port: smtpPort,
+  secure: smtpPort === 465,
+  auth: process.env.SMTP_USER
+    ? {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      }
+    : undefined,
 });
 
-// Verify connection
-transporter.verify((error, success) => {
-  if (error) {
-    console.error('SMTP connection failed:', error);
-  } else {
-    console.log('SMTP server is ready to send emails');
-  }
-});
+// Verify connection in non-test environments
+if (process.env.NODE_ENV !== 'test') {
+  transporter.verify((error) => {
+    if (error) {
+      console.error('SMTP connection failed:', error.message);
+    } else {
+      console.log('SMTP server is ready to send emails');
+    }
+  });
+}
 
-// Email templates
 const templates = {
-  passwordReset: (resetLink) => ({
-    subject: 'Đặt lại mật khẩu - Assignment Management System',
-    html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #0084FF;">Đặt lại mật khẩu</h2>
-        <p>Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản của mình.</p>
-        <p>Nhấp vào liên kết dưới đây để đặt lại mật khẩu:</p>
-        <a href="${resetLink}" style="background-color: #0084FF; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; display: inline-block; margin: 16px 0;">Đặt lại mật khẩu</a>
-        <p>Liên kết này sẽ hết hạn sau 1 giờ.</p>
-        <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
-        <hr>
-        <p style="color: #666; font-size: 12px;">Email này được gửi tự động từ Assignment Management System.</p>
-      </div>
-    `
-  }),
+  passwordReset: ({ fullName = 'bạn', token, expiresInMinutes = 3 }) => {
+    const tokenBlock = token
+      ? `<p>Mã xác nhận của bạn là: <strong>${token}</strong></p>`
+      : '';
 
-  assignmentDue: (assignmentTitle, dueDate, className) => ({
+    return {
+      subject: 'Đặt lại mật khẩu - Assignment Management System',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #0084FF;">Xin chào ${fullName},</h2>
+          <p>Chúng tôi đã nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
+          ${tokenBlock}
+          <p>Vui lòng quay lại màn hình "Quên mật khẩu" trong hệ thống và nhập mã để tiếp tục.</p>
+          <p>Mã xác nhận này sẽ hết hạn sau ${expiresInMinutes} phút.</p>
+          <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
+          <hr>
+          <p style="color: #666; font-size: 12px;">Email này được gửi tự động từ Assignment Management System.</p>
+        </div>
+      `,
+    };
+  },
+
+  assignmentDue: ({ assignmentTitle, dueDate, className }) => ({
     subject: `Nhắc nhở deadline bài tập: ${assignmentTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -49,10 +59,10 @@ const templates = {
         <hr>
         <p style="color: #666; font-size: 12px;">Email này được gửi tự động từ Assignment Management System.</p>
       </div>
-    `
+    `,
   }),
 
-  assignmentGraded: (assignmentTitle, score, className, notes = '') => ({
+  assignmentGraded: ({ assignmentTitle, score, className, notes = '' }) => ({
     subject: `Điểm bài tập: ${assignmentTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -64,10 +74,10 @@ const templates = {
         <hr>
         <p style="color: #666; font-size: 12px;">Email này được gửi tự động từ Assignment Management System.</p>
       </div>
-    `
+    `,
   }),
 
-  welcome: (fullName) => ({
+  welcome: ({ fullName }) => ({
     subject: 'Chào mừng đến với Assignment Management System',
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
@@ -77,49 +87,42 @@ const templates = {
         <hr>
         <p style="color: #666; font-size: 12px;">Email này được gửi tự động từ Assignment Management System.</p>
       </div>
-    `
-  })
+    `,
+  }),
 };
 
-// Send email function
 export const sendEmail = async (to, templateName, templateData = {}) => {
-  try {
-    const template = templates[templateName];
-    if (!template) {
-      throw new Error(`Template ${templateName} not found`);
-    }
-
-    const { subject, html } = typeof template === 'function' ? template(...Object.values(templateData)) : template;
-
-    const mailOptions = {
-      from: `"Assignment Management System" <${process.env.SMTP_USER}>`,
-      to,
-      subject,
-      html
-    };
-
-    const info = await transporter.sendMail(mailOptions);
-    console.log('Email sent successfully:', info.messageId);
-    return { success: true, messageId: info.messageId };
-  } catch (error) {
-    console.error('Failed to send email:', error);
-    throw error;
+  const template = templates[templateName];
+  if (!template) {
+    throw new Error(`Template ${templateName} not found`);
   }
+
+  const { subject, html } = typeof template === 'function' ? template(templateData) : template;
+
+  const mailOptions = {
+    from: `"Assignment Management System" <${process.env.SMTP_USER || 'no-reply@example.com'}>`,
+    to,
+    subject,
+    html,
+  };
+
+  const info = await transporter.sendMail(mailOptions);
+  console.log('Email sent successfully:', info.messageId);
+  return { success: true, messageId: info.messageId };
 };
 
-// Helper functions for common emails
-export const sendPasswordResetEmail = (email, resetLink) => {
-  return sendEmail(email, 'passwordReset', [resetLink]);
+export const sendPasswordResetEmail = (email, data) => {
+  return sendEmail(email, 'passwordReset', data);
 };
 
 export const sendAssignmentDueReminder = (email, assignmentTitle, dueDate, className) => {
-  return sendEmail(email, 'assignmentDue', [assignmentTitle, dueDate, className]);
+  return sendEmail(email, 'assignmentDue', { assignmentTitle, dueDate, className });
 };
 
 export const sendAssignmentGradedEmail = (email, assignmentTitle, score, className, notes) => {
-  return sendEmail(email, 'assignmentGraded', [assignmentTitle, score, className, notes]);
+  return sendEmail(email, 'assignmentGraded', { assignmentTitle, score, className, notes });
 };
 
 export const sendWelcomeEmail = (email, fullName) => {
-  return sendEmail(email, 'welcome', [fullName]);
+  return sendEmail(email, 'welcome', { fullName });
 };

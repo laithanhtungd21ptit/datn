@@ -28,6 +28,9 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Stepper,
+  Step,
+  StepLabel,
 } from '@mui/material';
 import {
   Edit,
@@ -48,26 +51,37 @@ import {
 import { api } from '../../../api/client';
 import { useAuth } from '../../../auth/AuthContext';
 
+const initialPasswordData = {
+  verificationCode: '',
+  newPassword: '',
+  confirmPassword: '',
+};
+
+const defaultNotificationSettings = {
+  emailNotifications: true,
+  smsNotifications: false,
+  assignmentDeadlines: true,
+  gradeUpdates: true,
+  classAnnouncements: true,
+  systemUpdates: true,
+};
+
 const StudentProfile = () => {
   const { currentUser, login } = useAuth();
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
-  });
+  const [passwordData, setPasswordData] = useState(initialPasswordData);
+  const [passwordStatus, setPasswordStatus] = useState({ type: '', message: '' });
+  const [passwordStep, setPasswordStep] = useState(0);
+  const [sendingCode, setSendingCode] = useState(false);
+  const [submittingReset, setSubmittingReset] = useState(false);
 
-  const [notificationSettings, setNotificationSettings] = useState({
-    emailNotifications: true,
-    smsNotifications: false,
-    assignmentDeadlines: true,
-    gradeUpdates: true,
-    classAnnouncements: true,
-    systemUpdates: false,
-  });
+  const [notificationSettings, setNotificationSettings] = useState(defaultNotificationSettings);
+  const [notificationMessage, setNotificationMessage] = useState('');
+  const [notificationErrorMessage, setNotificationErrorMessage] = useState('');
+  const [notificationSavingKey, setNotificationSavingKey] = useState('');
 
   const [editMode, setEditMode] = useState(false);
   const [openPasswordDialog, setOpenPasswordDialog] = useState(false);
@@ -78,12 +92,18 @@ const StudentProfile = () => {
   });
   const [tempProfile, setTempProfile] = useState(null);
 
+  const mergeNotificationSettings = (settings) => ({
+    ...defaultNotificationSettings,
+    ...(settings || {})
+  });
+
   useEffect(() => {
     const fetchProfile = async () => {
       try {
         setLoading(true);
         setError('');
         const data = await api.studentProfile();
+        const normalizedSettings = mergeNotificationSettings(data.notificationSettings);
         setProfile({
         ...data,
         major: data.department || 'Chưa cập nhật',
@@ -91,7 +111,8 @@ const StudentProfile = () => {
         class: 'IT01', // Default value
         // Academic statistics from API
         stats: data.stats || {},
-        enrolledClasses: data.enrolledClasses || []
+        enrolledClasses: data.enrolledClasses || [],
+        notificationSettings: normalizedSettings,
         });
         setTempProfile({
         ...data,
@@ -102,6 +123,7 @@ const StudentProfile = () => {
         stats: data.stats || {},
         enrolledClasses: data.enrolledClasses || []
         });
+        setNotificationSettings(normalizedSettings);
       } catch (err) {
         setError(err.message || 'Không thể tải thông tin cá nhân');
       } finally {
@@ -118,8 +140,18 @@ const StudentProfile = () => {
   };
 
   const handleSaveProfile = async () => {
+    // Preserve token before any operations
+    const originalToken = localStorage.getItem('accessToken');
+    
     try {
       setLoading(true);
+      setError(''); // Clear previous errors
+      
+      // Ensure token is available before making the request
+      if (!originalToken) {
+        throw new Error('No authentication token available. Please log in again.');
+      }
+      
       const updatedProfile = await api.studentUpdateProfile({
         fullName: tempProfile.fullName,
         email: tempProfile.email,
@@ -129,13 +161,23 @@ const StudentProfile = () => {
         gender: tempProfile.gender,
         avatar: tempProfile.avatar
       });
+      
       setProfile(updatedProfile);
       setEditMode(false);
       
       // Update currentUser in AuthContext to reflect avatar change in header
-      if (currentUser) {
-        const token = localStorage.getItem('accessToken');
-        login(token, {
+      // Use the original token that was preserved before the update
+      if (currentUser && originalToken) {
+        // Ensure token is still in localStorage
+        const currentToken = localStorage.getItem('accessToken');
+        const tokenToUse = currentToken || originalToken;
+        
+        // Update localStorage if token was lost
+        if (!currentToken && originalToken) {
+          localStorage.setItem('accessToken', originalToken);
+        }
+        
+        login(tokenToUse, {
           ...currentUser,
           avatar: updatedProfile.avatar,
           fullName: updatedProfile.fullName,
@@ -144,6 +186,18 @@ const StudentProfile = () => {
       }
     } catch (error) {
       setError(error.message || 'Không thể cập nhật thông tin cá nhân');
+      
+      // Always restore token on error to prevent authentication issues
+      if (originalToken) {
+        const currentToken = localStorage.getItem('accessToken');
+        if (!currentToken || currentToken !== originalToken) {
+          localStorage.setItem('accessToken', originalToken);
+          if (currentUser) {
+            // Re-apply the token to ensure it's still active
+            login(originalToken, currentUser);
+          }
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -161,6 +215,24 @@ const StudentProfile = () => {
     }));
   };
 
+  const handleOpenPasswordDialog = () => {
+    setPasswordStatus({ type: '', message: '' });
+    setPasswordData(initialPasswordData);
+    setShowPasswords({ current: false, new: false, confirm: false });
+    setPasswordStep(0);
+    setOpenPasswordDialog(true);
+  };
+
+  const handleClosePasswordDialog = () => {
+    setOpenPasswordDialog(false);
+    setPasswordStatus({ type: '', message: '' });
+    setPasswordData(initialPasswordData);
+    setShowPasswords({ current: false, new: false, confirm: false });
+    setPasswordStep(0);
+    setSendingCode(false);
+    setSubmittingReset(false);
+  };
+
   const handlePasswordChange = (field, value) => {
     setPasswordData(prev => ({
       ...prev,
@@ -168,26 +240,95 @@ const StudentProfile = () => {
     }));
   };
 
-  const handleSavePassword = () => {
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      alert('Mật khẩu mới không khớp!');
+  const handleSendPasswordCode = async () => {
+    if (!profile?.email) {
+      setPasswordStatus({ type: 'error', message: 'Không tìm thấy email tài khoản.' });
       return;
     }
-    // Handle password change logic
-    console.log('Changing password...');
-    setOpenPasswordDialog(false);
-    setPasswordData({
-      currentPassword: '',
-      newPassword: '',
-      confirmPassword: '',
-    });
+    setPasswordStatus({ type: '', message: '' });
+    setSendingCode(true);
+    try {
+      await api.authForgotPassword(profile.email);
+      setPasswordStatus({ type: 'success', message: 'Đã gửi mã xác nhận vào email của bạn.' });
+      setPasswordStep(1);
+    } catch (err) {
+      setPasswordStatus({ type: 'error', message: err?.message || 'Không thể gửi mã xác nhận.' });
+    } finally {
+      setSendingCode(false);
+    }
   };
 
-  const handleNotificationChange = (setting, value) => {
+  const handleSubmitPasswordReset = async () => {
+    setPasswordStatus({ type: '', message: '' });
+
+    if (!passwordData.verificationCode) {
+      setPasswordStatus({ type: 'error', message: 'Vui lòng nhập mã xác nhận.' });
+      return;
+    }
+
+    if (!passwordData.newPassword || !passwordData.confirmPassword) {
+      setPasswordStatus({ type: 'error', message: 'Vui lòng nhập đầy đủ thông tin.' });
+      return;
+    }
+
+    if (passwordData.newPassword.length < 8) {
+      setPasswordStatus({ type: 'error', message: 'Mật khẩu mới phải có ít nhất 8 ký tự.' });
+      return;
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      setPasswordStatus({ type: 'error', message: 'Mật khẩu mới không khớp.' });
+      return;
+    }
+
+    setSubmittingReset(true);
+    try {
+      await api.authResetPassword({
+        token: passwordData.verificationCode.trim(),
+        newPassword: passwordData.newPassword,
+      });
+      setPasswordStatus({ type: 'success', message: 'Đổi mật khẩu thành công.' });
+      setTimeout(() => {
+        handleClosePasswordDialog();
+      }, 1200);
+    } catch (err) {
+      let message = err?.message || 'Không thể đổi mật khẩu.';
+      if (message === 'INVALID_OR_EXPIRED_TOKEN') {
+        message = 'Mã xác nhận không hợp lệ hoặc đã hết hạn.';
+      }
+      setPasswordStatus({ type: 'error', message });
+    } finally {
+      setSubmittingReset(false);
+    }
+  };
+
+  const handleNotificationChange = async (setting, value) => {
+    const previousValue = notificationSettings[setting];
     setNotificationSettings(prev => ({
       ...prev,
       [setting]: value
     }));
+    setNotificationMessage('');
+    setNotificationErrorMessage('');
+    setNotificationSavingKey(setting);
+    let success = false;
+    try {
+      const updated = await api.studentUpdateNotificationSettings({ [setting]: value });
+      setNotificationSettings(mergeNotificationSettings(updated));
+      setNotificationMessage('Đã cập nhật cài đặt thông báo.');
+      success = true;
+    } catch (err) {
+      setNotificationErrorMessage(err?.message || 'Không thể cập nhật cài đặt thông báo.');
+      setNotificationSettings(prev => ({
+        ...prev,
+        [setting]: previousValue
+      }));
+    } finally {
+      if (success) {
+        setTimeout(() => setNotificationMessage(''), 2000);
+      }
+      setNotificationSavingKey('');
+    }
   };
 
   const togglePasswordVisibility = (field) => {
@@ -519,7 +660,7 @@ const StudentProfile = () => {
                   <ListItemSecondaryAction>
                     <Button
                       size="small"
-                      onClick={() => setOpenPasswordDialog(true)}
+                      onClick={handleOpenPasswordDialog}
                     >
                       Thay đổi
                     </Button>
@@ -535,6 +676,7 @@ const StudentProfile = () => {
                     <Switch
                       checked={notificationSettings.emailNotifications}
                       onChange={(e) => handleNotificationChange('emailNotifications', e.target.checked)}
+                    disabled={notificationSavingKey === 'emailNotifications'}
                     />
                   </ListItemSecondaryAction>
                 </ListItem>
@@ -558,6 +700,17 @@ const StudentProfile = () => {
               <Typography variant="h6" gutterBottom>
                 Cài đặt thông báo
               </Typography>
+
+              {notificationMessage && (
+                <Alert severity="success" sx={{ mb: 2 }}>
+                  {notificationMessage}
+                </Alert>
+              )}
+              {notificationErrorMessage && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {notificationErrorMessage}
+                </Alert>
+              )}
               
               <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                 <FormControlLabel
@@ -565,6 +718,7 @@ const StudentProfile = () => {
                     <Switch
                       checked={notificationSettings.assignmentDeadlines}
                       onChange={(e) => handleNotificationChange('assignmentDeadlines', e.target.checked)}
+                      disabled={notificationSavingKey === 'assignmentDeadlines'}
                     />
                   }
                   label="Deadline bài tập"
@@ -575,6 +729,7 @@ const StudentProfile = () => {
                     <Switch
                       checked={notificationSettings.gradeUpdates}
                       onChange={(e) => handleNotificationChange('gradeUpdates', e.target.checked)}
+                      disabled={notificationSavingKey === 'gradeUpdates'}
                     />
                   }
                   label="Cập nhật điểm"
@@ -585,6 +740,7 @@ const StudentProfile = () => {
                     <Switch
                       checked={notificationSettings.classAnnouncements}
                       onChange={(e) => handleNotificationChange('classAnnouncements', e.target.checked)}
+                      disabled={notificationSavingKey === 'classAnnouncements'}
                     />
                   }
                   label="Thông báo lớp học"
@@ -595,6 +751,7 @@ const StudentProfile = () => {
                     <Switch
                       checked={notificationSettings.systemUpdates}
                       onChange={(e) => handleNotificationChange('systemUpdates', e.target.checked)}
+                      disabled={notificationSavingKey === 'systemUpdates'}
                     />
                   }
                   label="Cập nhật hệ thống"
@@ -608,88 +765,144 @@ const StudentProfile = () => {
       {/* Password Change Dialog */}
       <Dialog
         open={openPasswordDialog}
-        onClose={() => setOpenPasswordDialog(false)}
+        onClose={handleClosePasswordDialog}
         maxWidth="sm"
         fullWidth
       >
         <DialogTitle>Đổi mật khẩu</DialogTitle>
         <DialogContent>
           <Alert severity="info" sx={{ mb: 2 }}>
-            Mật khẩu mới phải có ít nhất 8 ký tự, bao gồm chữ hoa, chữ thường và số.
+            Quy trình gồm 2 bước: nhận mã xác nhận qua email và sử dụng mã đó để đặt mật khẩu mới (ít nhất 8 ký tự).
           </Alert>
-          
-          <TextField
-            autoFocus
-            margin="dense"
-            label="Mật khẩu hiện tại"
-            type={showPasswords.current ? 'text' : 'password'}
-            fullWidth
-            variant="outlined"
-            value={passwordData.currentPassword}
-            onChange={(e) => handlePasswordChange('currentPassword', e.target.value)}
-            InputProps={{
-              endAdornment: (
-                <IconButton
-                  onClick={() => togglePasswordVisibility('current')}
-                  edge="end"
-                >
-                  {showPasswords.current ? <VisibilityOff /> : <Visibility />}
-                </IconButton>
-              ),
-            }}
-          />
-          
-          <TextField
-            margin="dense"
-            label="Mật khẩu mới"
-            type={showPasswords.new ? 'text' : 'password'}
-            fullWidth
-            variant="outlined"
-            value={passwordData.newPassword}
-            onChange={(e) => handlePasswordChange('newPassword', e.target.value)}
-            InputProps={{
-              endAdornment: (
-                <IconButton
-                  onClick={() => togglePasswordVisibility('new')}
-                  edge="end"
-                >
-                  {showPasswords.new ? <VisibilityOff /> : <Visibility />}
-                </IconButton>
-              ),
-            }}
-          />
-          
-          <TextField
-            margin="dense"
-            label="Xác nhận mật khẩu mới"
-            type={showPasswords.confirm ? 'text' : 'password'}
-            fullWidth
-            variant="outlined"
-            value={passwordData.confirmPassword}
-            onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)}
-            InputProps={{
-              endAdornment: (
-                <IconButton
-                  onClick={() => togglePasswordVisibility('confirm')}
-                  edge="end"
-                >
-                  {showPasswords.confirm ? <VisibilityOff /> : <Visibility />}
-                </IconButton>
-              ),
-            }}
-          />
+
+          {passwordStatus.message && (
+            <Alert severity={passwordStatus.type === 'success' ? 'success' : 'error'} sx={{ mb: 2 }}>
+              {passwordStatus.message}
+            </Alert>
+          )}
+
+          <Stepper activeStep={passwordStep} alternativeLabel sx={{ mb: 3 }}>
+            {['Nhận mã xác nhận', 'Đặt mật khẩu mới'].map(label => (
+              <Step key={label}>
+                <StepLabel>{label}</StepLabel>
+              </Step>
+            ))}
+          </Stepper>
+
+          {passwordStep === 0 && (
+            <Box>
+              <TextField
+                label="Email nhận mã"
+                fullWidth
+                margin="dense"
+                value={profile?.email || ''}
+                disabled
+                InputProps={{
+                  startAdornment: <Email sx={{ mr: 1, color: 'text.secondary' }} />
+                }}
+              />
+              <Button
+                variant="contained"
+                fullWidth
+                sx={{ mt: 2 }}
+                onClick={handleSendPasswordCode}
+                disabled={sendingCode}
+              >
+                {sendingCode ? 'Đang gửi mã...' : 'Gửi mã xác nhận'}
+              </Button>
+            </Box>
+          )}
+
+          {passwordStep === 1 && (
+            <Box>
+              <TextField
+                margin="dense"
+                label="Mã xác nhận"
+                fullWidth
+                value={passwordData.verificationCode}
+                onChange={(e) => handlePasswordChange('verificationCode', e.target.value)}
+              />
+
+              <TextField
+                margin="dense"
+                label="Mật khẩu mới"
+                type={showPasswords.new ? 'text' : 'password'}
+                fullWidth
+                variant="outlined"
+                value={passwordData.newPassword}
+                onChange={(e) => handlePasswordChange('newPassword', e.target.value)}
+                InputProps={{
+                  endAdornment: (
+                    <IconButton
+                      onClick={() => togglePasswordVisibility('new')}
+                      edge="end"
+                    >
+                      {showPasswords.new ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  ),
+                }}
+              />
+
+              <TextField
+                margin="dense"
+                label="Xác nhận mật khẩu mới"
+                type={showPasswords.confirm ? 'text' : 'password'}
+                fullWidth
+                variant="outlined"
+                value={passwordData.confirmPassword}
+                onChange={(e) => handlePasswordChange('confirmPassword', e.target.value)}
+                InputProps={{
+                  endAdornment: (
+                    <IconButton
+                      onClick={() => togglePasswordVisibility('confirm')}
+                      edge="end"
+                    >
+                      {showPasswords.confirm ? <VisibilityOff /> : <Visibility />}
+                    </IconButton>
+                  ),
+                }}
+              />
+
+              <Button
+                variant="text"
+                sx={{ mt: 1 }}
+                onClick={() => {
+                  setPasswordStep(0);
+                  setPasswordStatus({ type: '', message: '' });
+                }}
+                disabled={submittingReset}
+              >
+                Gửi lại mã
+              </Button>
+            </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenPasswordDialog(false)}>
+          <Button onClick={handleClosePasswordDialog} disabled={sendingCode || submittingReset}>
             Hủy
           </Button>
-          <Button
-            onClick={handleSavePassword}
-            variant="contained"
-            disabled={!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword}
-          >
-            Đổi mật khẩu
-          </Button>
+          {passwordStep === 1 ? (
+            <Button
+              onClick={handleSubmitPasswordReset}
+              variant="contained"
+              disabled={
+                submittingReset ||
+                !passwordData.verificationCode ||
+                !passwordData.newPassword ||
+                !passwordData.confirmPassword
+              }
+            >
+              {submittingReset ? 'Đang xử lý...' : 'Đổi mật khẩu'}
+            </Button>
+          ) : (
+            <Button
+              onClick={handleSendPasswordCode}
+              variant="contained"
+              disabled={sendingCode}
+            >
+              {sendingCode ? 'Đang gửi mã...' : 'Gửi mã'}
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>

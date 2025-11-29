@@ -37,6 +37,8 @@ ListItemText,
 ListItemIcon,
   Divider,
   Alert,
+  FormControlLabel,
+  Switch,
 } from '@mui/material';
 import {
 Add,
@@ -53,7 +55,7 @@ Download,
 Send,
   FilterList,
 } from '@mui/icons-material';
-import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { DateTimePicker } from '@mui/x-date-pickers/DateTimePicker';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import dayjs from 'dayjs';
@@ -105,7 +107,7 @@ const TeacherAssignments = () => {
           title: a.title,
           description: a.description,
           dueDate: a.dueDate || '',
-          deadline: a.dueDate ? new Date(a.dueDate).toISOString().slice(0,10) : '',
+          deadline: a.dueDate || '',
           status: a.status,
           class: a.className,
           classCode: a.classCode,
@@ -117,6 +119,9 @@ const TeacherAssignments = () => {
           durationMinutes: a.durationMinutes,
           attachments: [],
           createdAt: a.createdAt || new Date().toISOString(),
+          startTime: a.startTime || '',
+          endTime: a.endTime || '',
+          requireMonitoring: a.requireMonitoring || false,
         })).sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
 
         setAssignments(sortedAssignments);
@@ -282,12 +287,31 @@ const TeacherAssignments = () => {
     setOpenDialog(true);
   };
 
-  const [createForm, setCreateForm] = useState({ classId: '', title: '', description: '', dueDate: '', isExam: false, durationMinutes: 60 });
+  const [createForm, setCreateForm] = useState({
+    classId: '',
+    title: '',
+    description: '',
+    dueDate: '',
+    isExam: false,
+    durationMinutes: 60,
+    startTime: '',
+    requireMonitoring: false,
+  });
   const [creating, setCreating] = useState(false);
 
   // Edit assignment state
   const [openEditDialog, setOpenEditDialog] = useState(false);
-  const [editForm, setEditForm] = useState({ id: '', classId: '', title: '', description: '', dueDate: '', isExam: false, durationMinutes: 60 });
+  const [editForm, setEditForm] = useState({
+    id: '',
+    classId: '',
+    title: '',
+    description: '',
+    dueDate: '',
+    isExam: false,
+    durationMinutes: 60,
+    startTime: '',
+    requireMonitoring: false,
+  });
   const [editing, setEditing] = useState(false);
 
   const submitCreate = async () => {
@@ -301,6 +325,8 @@ const TeacherAssignments = () => {
         dueDate: createForm.dueDate,
         isExam: createForm.isExam,
         durationMinutes: createForm.isExam ? Number(createForm.durationMinutes || 60) : null,
+        startTime: createForm.isExam ? (createForm.startTime || createForm.dueDate) : null,
+        requireMonitoring: createForm.isExam ? createForm.requireMonitoring : false,
       });
       const list = await api.teacherAssignmentsList();
       setAssignments(list.map(a => ({
@@ -308,7 +334,7 @@ const TeacherAssignments = () => {
         title: a.title,
         description: a.description,
         dueDate: a.dueDate || '',
-        deadline: a.dueDate ? new Date(a.dueDate).toISOString().slice(0,10) : '',
+        deadline: a.dueDate || '',
         status: a.status,
         class: a.className,
         classCode: a.classCode,
@@ -318,10 +344,13 @@ const TeacherAssignments = () => {
         totalStudents: a.totalStudents,
         isExam: a.isExam,
         durationMinutes: a.durationMinutes,
-        attachments: []
+        attachments: [],
+        startTime: a.startTime || '',
+        endTime: a.endTime || '',
+        requireMonitoring: a.requireMonitoring || false,
       })));
       setOpenDialog(false);
-      setCreateForm({ classId: '', title: '', description: '', dueDate: '', isExam: false, durationMinutes: 60 });
+      setCreateForm({ classId: '', title: '', description: '', dueDate: '', isExam: false, durationMinutes: 60, startTime: '', requireMonitoring: false });
     } catch (e) {
       setError(e?.message || 'Không thể tạo bài tập');
     } finally {
@@ -340,7 +369,9 @@ const TeacherAssignments = () => {
         description: fullAssignment.description || '',
         dueDate: fullAssignment.dueDate || '',
         isExam: fullAssignment.isExam || false,
-        durationMinutes: fullAssignment.durationMinutes || 60
+        durationMinutes: fullAssignment.durationMinutes || 60,
+        startTime: fullAssignment.startTime || '',
+        requireMonitoring: fullAssignment.requireMonitoring || false,
       });
       setOpenEditDialog(true);
     }
@@ -373,18 +404,30 @@ const TeacherAssignments = () => {
         description: editForm.description,
         dueDate: editForm.dueDate,
         isExam: editForm.isExam,
-        durationMinutes: editForm.isExam ? Number(editForm.durationMinutes || 60) : null
+        durationMinutes: editForm.isExam ? Number(editForm.durationMinutes || 60) : null,
+        startTime: editForm.isExam ? (editForm.startTime || editForm.dueDate) : null,
+        requireMonitoring: editForm.isExam ? editForm.requireMonitoring : false,
       });
 
       // Update local state
       setAssignments(prev => prev.map(a =>
         a.id === editForm.id
-          ? { ...a, title: editForm.title, description: editForm.description, dueDate: editForm.dueDate, deadline: editForm.dueDate ? new Date(editForm.dueDate).toISOString().slice(0,10) : '', isExam: editForm.isExam, durationMinutes: editForm.durationMinutes }
+          ? {
+              ...a,
+              title: editForm.title,
+              description: editForm.description,
+              dueDate: editForm.dueDate,
+              deadline: editForm.dueDate,
+              isExam: editForm.isExam,
+              durationMinutes: editForm.durationMinutes,
+              startTime: editForm.startTime,
+              requireMonitoring: editForm.requireMonitoring,
+            }
           : a
       ));
 
       setOpenEditDialog(false);
-      setEditForm({ id: '', classId: '', title: '', description: '', dueDate: '', isExam: false, durationMinutes: 60 });
+      setEditForm({ id: '', classId: '', title: '', description: '', dueDate: '', isExam: false, durationMinutes: 60, startTime: '', requireMonitoring: false });
     } catch (e) {
       setError(e?.message || 'Không thể cập nhật bài tập');
     } finally {
@@ -426,6 +469,7 @@ const TeacherAssignments = () => {
       case 'active': return 'success';
       case 'draft': return 'default';
       case 'closed': return 'error';
+      case 'overdue': return 'error';
       default: return 'default';
     }
   };
@@ -437,6 +481,11 @@ const TeacherAssignments = () => {
       case 'late': return 'error';
       default: return 'default';
     }
+  };
+
+  const formatDateTimeDisplay = (value) => {
+    if (!value) return '---';
+    return dayjs(value).format('DD/MM/YYYY HH:mm');
   };
 
   return (
@@ -566,7 +615,7 @@ const TeacherAssignments = () => {
                       {assignment.description}
                     </Typography>
 
-                    <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
                       <Chip
                         label={assignment.status}
                         color={getStatusColor(assignment.status)}
@@ -577,10 +626,17 @@ const TeacherAssignments = () => {
                       )}
                       <Chip
                         icon={<Schedule />}
-                        label={`Hạn: ${assignment.deadline}`}
+                        label={`Hạn: ${formatDateTimeDisplay(assignment.deadline)}`}
                         size="small"
-                        color="warning"
+                        color={new Date(assignment.deadline) < new Date() ? 'error' : 'default'}
                       />
+                      {assignment.isExam && assignment.startTime && (
+                        <Chip
+                          label={`Bắt đầu: ${formatDateTimeDisplay(assignment.startTime)}`}
+                          size="small"
+                          variant="outlined"
+                        />
+                      )}
                     </Box>
 
                     <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
@@ -1220,10 +1276,13 @@ const TeacherAssignments = () => {
               select
               value={createForm.classId}
               onChange={(e) => setCreateForm(prev => ({ ...prev, classId: e.target.value }))}
-              SelectProps={{ native: true }}
             >
-              <option value="">Chọn lớp học</option>
-              {/* Gợi ý: có thể fetch /api/teacher/classes để đổ options */}
+              <MenuItem value="">Chọn lớp học</MenuItem>
+              {classes.map(cls => (
+                <MenuItem key={cls.id} value={cls.id}>
+                  {cls.name} {cls.code ? `(${cls.code})` : ''}
+                </MenuItem>
+              ))}
             </TextField>
             <TextField
               margin="dense"
@@ -1235,8 +1294,9 @@ const TeacherAssignments = () => {
               value={createForm.description}
               onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
             />
-            <DatePicker
+            <DateTimePicker
               label="Deadline"
+              ampm={false}
               slotProps={{
                 textField: {
                   fullWidth: true,
@@ -1244,7 +1304,8 @@ const TeacherAssignments = () => {
                 }
               }}
               value={createForm.dueDate ? dayjs(createForm.dueDate) : null}
-              onChange={(v) => setCreateForm(prev => ({ ...prev, dueDate: v ? v.toISOString() : '' }))}
+              onChange={(v) => setCreateForm(prev => ({ ...prev, dueDate: v && v.isValid() ? v.toISOString() : '' }))}
+              format="DD/MM/YYYY HH:mm"
             />
             <TextField
               margin="dense"
@@ -1265,7 +1326,17 @@ const TeacherAssignments = () => {
                   <Chip
                     label={createForm.isExam ? 'Kỳ thi: Bật' : 'Kỳ thi: Tắt'}
                     color={createForm.isExam ? 'error' : 'default'}
-                    onClick={() => setCreateForm(prev => ({ ...prev, isExam: !prev.isExam }))}
+                    onClick={() =>
+                      setCreateForm(prev => {
+                        const nextIsExam = !prev.isExam;
+                        return {
+                          ...prev,
+                          isExam: nextIsExam,
+                          startTime: nextIsExam ? (prev.startTime || prev.dueDate) : '',
+                          requireMonitoring: nextIsExam ? prev.requireMonitoring : false,
+                        };
+                      })
+                    }
                     clickable
                   />
                   {createForm.isExam && (
@@ -1279,11 +1350,13 @@ const TeacherAssignments = () => {
                 </Box>
                 {createForm.isExam && (
                   <>
-                    <DatePicker
+                    <DateTimePicker
                       label="Thời gian bắt đầu"
-                      disabled
-                      value={null}
+                      ampm={false}
+                      value={createForm.startTime ? dayjs(createForm.startTime) : null}
+                      onChange={(v) => setCreateForm(prev => ({ ...prev, startTime: v && v.isValid() ? v.toISOString() : '' }))}
                       slotProps={{ textField: { fullWidth: true } }}
+                      format="DD/MM/YYYY HH:mm"
                     />
                     <TextField
                       label="Thời lượng (phút)"
@@ -1291,6 +1364,15 @@ const TeacherAssignments = () => {
                       value={createForm.durationMinutes}
                       onChange={(e) => setCreateForm(prev => ({ ...prev, durationMinutes: parseInt(e.target.value || '0', 10) }))}
                       fullWidth
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={createForm.requireMonitoring}
+                          onChange={(e) => setCreateForm(prev => ({ ...prev, requireMonitoring: e.target.checked }))}
+                        />
+                      }
+                      label="Bắt buộc bật camera/micro"
                     />
                   </>
                 )}
@@ -1335,8 +1417,9 @@ const TeacherAssignments = () => {
               value={editForm.description}
               onChange={(e) => setEditForm(prev => ({ ...prev, description: e.target.value }))}
             />
-            <DatePicker
+            <DateTimePicker
               label="Deadline"
+              ampm={false}
               slotProps={{
                 textField: {
                   fullWidth: true,
@@ -1344,7 +1427,8 @@ const TeacherAssignments = () => {
                 }
               }}
               value={editForm.dueDate ? dayjs(editForm.dueDate) : null}
-              onChange={(v) => setEditForm(prev => ({ ...prev, dueDate: v ? v.toISOString() : '' }))}
+              onChange={(v) => setEditForm(prev => ({ ...prev, dueDate: v && v.isValid() ? v.toISOString() : '' }))}
+              format="DD/MM/YYYY HH:mm"
             />
 
             <Box sx={{ mt: 3 }}>
@@ -1356,18 +1440,47 @@ const TeacherAssignments = () => {
                   <Chip
                     label={editForm.isExam ? 'Kỳ thi: Bật' : 'Kỳ thi: Tắt'}
                     color={editForm.isExam ? 'error' : 'default'}
-                    onClick={() => setEditForm(prev => ({ ...prev, isExam: !prev.isExam }))}
+                    onClick={() =>
+                      setEditForm(prev => {
+                        const nextIsExam = !prev.isExam;
+                        return {
+                          ...prev,
+                          isExam: nextIsExam,
+                          startTime: nextIsExam ? (prev.startTime || prev.dueDate) : '',
+                          requireMonitoring: nextIsExam ? prev.requireMonitoring : false,
+                        };
+                      })
+                    }
                     clickable
                   />
                 </Box>
                 {editForm.isExam && (
-                  <TextField
-                    label="Thời lượng (phút)"
-                    type="number"
-                    value={editForm.durationMinutes}
-                    onChange={(e) => setEditForm(prev => ({ ...prev, durationMinutes: parseInt(e.target.value || '0', 10) }))}
-                    fullWidth
-                  />
+                  <>
+                    <DateTimePicker
+                      label="Thời gian bắt đầu"
+                      ampm={false}
+                      value={editForm.startTime ? dayjs(editForm.startTime) : null}
+                      onChange={(v) => setEditForm(prev => ({ ...prev, startTime: v && v.isValid() ? v.toISOString() : '' }))}
+                      slotProps={{ textField: { fullWidth: true } }}
+                      format="DD/MM/YYYY HH:mm"
+                    />
+                    <TextField
+                      label="Thời lượng (phút)"
+                      type="number"
+                      value={editForm.durationMinutes}
+                      onChange={(e) => setEditForm(prev => ({ ...prev, durationMinutes: parseInt(e.target.value || '0', 10) }))}
+                      fullWidth
+                    />
+                    <FormControlLabel
+                      control={
+                        <Switch
+                          checked={editForm.requireMonitoring}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, requireMonitoring: e.target.checked }))}
+                        />
+                      }
+                      label="Bắt buộc bật camera/micro"
+                    />
+                  </>
                 )}
               </Box>
             </Box>

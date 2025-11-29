@@ -3,6 +3,8 @@ import { MessageModel } from '../models/Message.js';
 import { UserModel } from '../models/User.js';
 import { ClassModel } from '../models/Class.js';
 import { EnrollmentModel } from '../models/Enrollment.js';
+import { useCloudinary } from '../middleware/upload.js';
+import { uploadToCloudinary } from '../middleware/cloudinary.js';
 
 // Helper function to check if user can access conversation
 const canAccessConversation = async (userId, conversationId) => {
@@ -317,11 +319,11 @@ export const createConversation = async (req, res) => {
 // Send a message
 export const sendMessage = async (req, res) => {
   try {
-    const { conversationId, content } = req.body;
+    const { conversationId, content = '', messageType } = req.body;
     const userId = req.user.id;
 
-    if (!content || !content.trim()) {
-      return res.status(400).json({ message: 'Nội dung tin nhắn không được để trống' });
+    if (!conversationId) {
+      return res.status(400).json({ message: 'Thiếu conversationId' });
     }
 
     // Check if user can access this conversation
@@ -330,10 +332,51 @@ export const sendMessage = async (req, res) => {
       return res.status(403).json({ message: 'Không có quyền gửi tin nhắn vào cuộc trò chuyện này' });
     }
 
+    const trimmedContent = content?.trim() || '';
+    const files = req.files || [];
+
+    if (!trimmedContent && files.length === 0) {
+      return res.status(400).json({ message: 'Tin nhắn rỗng' });
+    }
+
+    const attachments = [];
+
+    for (const file of files) {
+      let fileUrl = '';
+
+      if (useCloudinary) {
+        const fileName = `chat-${conversationId}-${Date.now()}-${file.originalname}`;
+        const result = await uploadToCloudinary(file.buffer, fileName, 'datn2025/chat');
+        fileUrl = result.secure_url;
+      } else {
+        fileUrl = `/uploads/${file.filename}`;
+      }
+
+      attachments.push({
+        url: fileUrl,
+        fileName: file.originalname,
+        fileType: file.mimetype,
+        fileSize: file.size,
+        isImage: file.mimetype.startsWith('image/')
+      });
+    }
+
+    const hasAttachments = attachments.length > 0;
+    const derivedType = hasAttachments
+      ? (attachments.every(att => att.isImage) ? 'image' : 'file')
+      : (messageType || 'text');
+
+    const fallbackContent = hasAttachments
+      ? (trimmedContent ||
+        (attachments.length === 1 ? attachments[0].fileName : `${attachments.length} tệp đính kèm`))
+      : trimmedContent;
+
     const message = new MessageModel({
       conversationId,
       senderId: userId,
-      content: content.trim(),
+      content: fallbackContent,
+      messageType: derivedType,
+      attachments,
       readBy: [{ userId, readAt: new Date() }]
     });
 
@@ -344,7 +387,7 @@ export const sendMessage = async (req, res) => {
     await ConversationModel.findByIdAndUpdate(conversationId, {
       lastMessage: {
         senderId: userId,
-        content: content.trim(),
+        content: fallbackContent,
         sentAt: new Date()
       },
       updatedAt: new Date()

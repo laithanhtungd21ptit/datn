@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { UserModel } from '../../models/User.js';
 import { logUserActivity } from '../../utils/logger.js';
+import { sendPasswordResetEmail } from '../../services/emailService.js';
 
 export const authRouter = Router();
 
@@ -15,6 +16,9 @@ authRouter.post('/login', async (req, res) => {
   if (!user) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
   const ok = await bcrypt.compare(password, user.passwordHash);
   if (!ok) return res.status(401).json({ error: 'INVALID_CREDENTIALS' });
+  if (user.status !== 'active') {
+    return res.status(403).json({ error: 'ACCOUNT_DISABLED' });
+  }
   if (expectedRole && user.role !== expectedRole) {
     return res.status(403).json({ error: 'ROLE_MISMATCH' });
   }
@@ -64,11 +68,39 @@ authRouter.post('/forgot-password', async (req, res) => {
   if (!email) return res.status(400).json({ error: 'EMAIL_REQUIRED' });
   const user = await UserModel.findOne({ email }).lean();
   if (!user) return res.json({ success: true });
+
   const token = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
-  const expires = new Date(Date.now() + 15 * 60 * 1000);
-  await UserModel.updateOne({ _id: user._id }, { $set: { resetPasswordToken: token, resetPasswordExpiresAt: expires } });
-  // NOTE: Thực tế sẽ gửi email. Tạm thời trả token để test (chỉ DEV)
-  return res.json({ success: true, resetToken: token, expiresAt: expires });
+  const expiresInMinutes = 3;
+  const expires = new Date(Date.now() + expiresInMinutes * 60 * 1000);
+
+  await UserModel.updateOne(
+    { _id: user._id },
+    { $set: { resetPasswordToken: token, resetPasswordExpiresAt: expires } }
+  );
+
+  const frontendBase = (process.env.FRONTEND_URL || 'http://localhost:3000').replace(/\/$/, '');
+  const resetPath = process.env.FRONTEND_RESET_PATH || '/reset-password';
+  const resetLink = `${frontendBase}${resetPath}?token=${token}`;
+
+  try {
+    await sendPasswordResetEmail(user.email, {
+      fullName: user.fullName || user.username || 'bạn',
+      resetLink,
+      token: process.env.NODE_ENV !== 'production' ? token : undefined,
+      expiresInMinutes,
+    });
+  } catch (error) {
+    console.error('Failed to send password reset email:', error.message);
+  }
+
+  const responsePayload = { success: true };
+  if (process.env.NODE_ENV !== 'production') {
+    responsePayload.resetToken = token;
+    responsePayload.expiresAt = expires;
+    responsePayload.expiresInMinutes = expiresInMinutes;
+  }
+
+  return res.json(responsePayload);
 });
 
 authRouter.post('/reset-password', async (req, res) => {

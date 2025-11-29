@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { DEFAULT_NOTIFICATION_SETTINGS } from '../constants/notificationSettings.js';
 
 const UserSchema = new mongoose.Schema(
   {
@@ -20,6 +21,16 @@ const UserSchema = new mongoose.Schema(
     lastLoginAt: { type: Date, default: null },
     resetPasswordToken: { type: String, default: null },
     resetPasswordExpiresAt: { type: Date, default: null },
+    notificationSettings: {
+      emailNotifications: { type: Boolean, default: DEFAULT_NOTIFICATION_SETTINGS.emailNotifications },
+      smsNotifications: { type: Boolean, default: DEFAULT_NOTIFICATION_SETTINGS.smsNotifications },
+      assignmentDeadlines: { type: Boolean, default: DEFAULT_NOTIFICATION_SETTINGS.assignmentDeadlines },
+      gradeUpdates: { type: Boolean, default: DEFAULT_NOTIFICATION_SETTINGS.gradeUpdates },
+      classAnnouncements: { type: Boolean, default: DEFAULT_NOTIFICATION_SETTINGS.classAnnouncements },
+      systemUpdates: { type: Boolean, default: DEFAULT_NOTIFICATION_SETTINGS.systemUpdates },
+    },
+    lastNotificationReadAt: { type: Date, default: null },
+    teacherReadNotificationIds: { type: [String], default: [] }, // Array of notification IDs that teacher has read
   },
   { timestamps: true }
 );

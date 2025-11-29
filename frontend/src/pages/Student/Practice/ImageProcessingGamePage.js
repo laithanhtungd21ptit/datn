@@ -1,31 +1,205 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Box, Button, Paper, Slider, Typography } from '@mui/material';
+import { 
+  Box, 
+  Button, 
+  Paper, 
+  Slider, 
+  Typography, 
+  Grid,
+  Tabs,
+  Tab,
+  Chip,
+  Tooltip,
+  IconButton,
+  Menu,
+  MenuItem,
+  TextField,
+  Alert,
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from '@mui/material';
+import {
+  Undo,
+  Redo,
+  Download,
+  CompareArrows,
+  FilterList,
+  Info,
+  Save,
+  Upload,
+  Image as ImageIcon,
+  Delete,
+  Refresh,
+} from '@mui/icons-material';
 
 const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
 const toGray = (r, g, b) => Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
 
 const availableFilters = [
-  { type: 'brightnessContrast', name: 'Brightness & Contrast', defaults: { brightness: 0, contrast: 0 } },
-  { type: 'gamma', name: 'Gamma Correction', defaults: { gamma: 1.0 } },
-  { type: 'saturationHue', name: 'Saturation & Hue', defaults: { saturation: 0, hue: 0 } },
-  { type: 'threshold', name: 'Threshold', defaults: { thresh: 128 } },
-  { type: 'mean', name: 'Mean Blur', defaults: { kernel: 3 } },
-  { type: 'median', name: 'Median Blur', defaults: { kernel: 3 } },
-  { type: 'gaussian', name: 'Gaussian Blur', defaults: { sigma: 1.0 } },
-  { type: 'sharpen', name: 'Sharpen (Unsharp Mask)', defaults: { amount: 0.5, radius: 1.0 } },
-  { type: 'sobel', name: 'Sobel/Prewitt', defaults: { operator: 'sobel' } },
-  { type: 'canny', name: 'Canny (đơn giản hóa)', defaults: { low: 30, high: 90 } },
-  { type: 'jpeg', name: 'Nén JPEG mô phỏng', defaults: { quality: 70 } },
+  { 
+    type: 'brightnessContrast', 
+    name: 'Brightness & Contrast', 
+    defaults: { brightness: 0, contrast: 0 },
+    description: 'Điều chỉnh độ sáng và độ tương phản của ảnh. Brightness thay đổi mức độ sáng tổng thể, Contrast điều chỉnh sự khác biệt giữa vùng sáng và tối.',
+  },
+  { 
+    type: 'gamma', 
+    name: 'Gamma Correction', 
+    defaults: { gamma: 1.0 },
+    description: 'Hiệu chỉnh gamma để điều chỉnh độ sáng không tuyến tính. Gamma < 1 làm ảnh sáng hơn, gamma > 1 làm ảnh tối hơn.',
+  },
+  { 
+    type: 'saturationHue', 
+    name: 'Saturation & Hue', 
+    defaults: { saturation: 0, hue: 0 },
+    description: 'Điều chỉnh độ bão hòa màu và sắc độ. Saturation: -100 (grayscale) đến +100 (rực rỡ). Hue: xoay vòng màu từ -180 đến +180 độ.',
+  },
+  { 
+    type: 'threshold', 
+    name: 'Threshold', 
+    defaults: { thresh: 128 },
+    description: 'Chuyển đổi ảnh sang nhị phân (đen trắng) dựa trên ngưỡng. Pixel có giá trị >= threshold thành trắng, còn lại thành đen.',
+  },
+  { 
+    type: 'mean', 
+    name: 'Mean Blur', 
+    defaults: { kernel: 3 },
+    description: 'Làm mờ ảnh bằng cách tính trung bình các pixel xung quanh. Kernel size càng lớn, ảnh càng mờ.',
+  },
+  { 
+    type: 'median', 
+    name: 'Median Blur', 
+    defaults: { kernel: 3 },
+    description: 'Làm mờ ảnh bằng cách thay thế mỗi pixel bằng giá trị trung vị của các pixel xung quanh. Hiệu quả để loại bỏ nhiễu muối tiêu.',
+  },
+  { 
+    type: 'gaussian', 
+    name: 'Gaussian Blur', 
+    defaults: { sigma: 1.0 },
+    description: 'Làm mờ ảnh sử dụng kernel Gaussian. Sigma càng lớn, độ mờ càng cao. Cho hiệu ứng mờ tự nhiên hơn Mean Blur.',
+  },
+  { 
+    type: 'sharpen', 
+    name: 'Sharpen (Unsharp Mask)', 
+    defaults: { amount: 0.5, radius: 1.0 },
+    description: 'Làm sắc nét ảnh bằng kỹ thuật unsharp mask. Amount: cường độ (0-2), Radius: kích thước vùng áp dụng.',
+  },
+  { 
+    type: 'sobel', 
+    name: 'Sobel/Prewitt', 
+    defaults: { operator: 'sobel' },
+    description: 'Phát hiện biên cạnh sử dụng toán tử Sobel hoặc Prewitt. Sobel nhạy hơn với nhiễu, Prewitt nhanh hơn.',
+  },
+  { 
+    type: 'canny', 
+    name: 'Canny Edge Detection', 
+    defaults: { low: 30, high: 90 },
+    description: 'Thuật toán phát hiện biên cạnh tiên tiến. Low threshold: ngưỡng yếu, High threshold: ngưỡng mạnh. Kết hợp Gaussian blur, gradient và hysteresis.',
+  },
+  { 
+    type: 'jpeg', 
+    name: 'JPEG Compression Simulation', 
+    defaults: { quality: 70 },
+    description: 'Mô phỏng nén JPEG bằng cách giảm độ phân giải và phóng to lại. Quality: 1 (thấp nhất) đến 100 (cao nhất).',
+  },
+];
+
+const presets = [
+  {
+    name: 'Cải thiện độ sáng',
+    filters: [
+      { type: 'brightnessContrast', params: { brightness: 20, contrast: 15 } },
+      { type: 'gamma', params: { gamma: 1.1 } },
+    ],
+  },
+  {
+    name: 'Làm sắc nét',
+    filters: [
+      { type: 'sharpen', params: { amount: 0.8, radius: 1.5 } },
+      { type: 'brightnessContrast', params: { brightness: 0, contrast: 10 } },
+    ],
+  },
+  {
+    name: 'Vintage',
+    filters: [
+      { type: 'saturationHue', params: { saturation: -30, hue: 15 } },
+      { type: 'brightnessContrast', params: { brightness: -10, contrast: 5 } },
+      { type: 'gamma', params: { gamma: 0.9 } },
+    ],
+  },
+  {
+    name: 'Phát hiện biên',
+    filters: [
+      { type: 'gaussian', params: { sigma: 1.0 } },
+      { type: 'canny', params: { low: 50, high: 150 } },
+    ],
+  },
+  {
+    name: 'Đen trắng nghệ thuật',
+    filters: [
+      { type: 'saturationHue', params: { saturation: -100, hue: 0 } },
+      { type: 'brightnessContrast', params: { brightness: 10, contrast: 30 } },
+    ],
+  },
 ];
 
 export default function ImageProcessingGamePage() {
   const resultCanvasRef = useRef(null);
   const histogramCanvasRef = useRef(null);
+  const histogramRgbCanvasRef = useRef(null);
   const originalCanvasRef = useRef(null);
+  const compareCanvasRef = useRef(null);
+  
   const [originalImage, setOriginalImage] = useState(null);
   const [pipeline, setPipeline] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
   const [isApplying, setIsApplying] = useState(false);
+  const [viewMode, setViewMode] = useState('result'); // 'result', 'split', 'compare'
+  const [selectedTab, setSelectedTab] = useState(0);
+  const [filterInfoAnchor, setFilterInfoAnchor] = useState(null);
+  const [selectedFilterInfo, setSelectedFilterInfo] = useState(null);
+  const [presetMenuAnchor, setPresetMenuAnchor] = useState(null);
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [importText, setImportText] = useState('');
   const dragItemIndexRef = useRef(null);
+
+  // Sample images
+  const loadSampleImage = () => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 400;
+    canvas.height = 300;
+    const ctx = canvas.getContext('2d');
+    
+    // Create gradient background
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    gradient.addColorStop(0, '#ff6b6b');
+    gradient.addColorStop(0.5, '#4ecdc4');
+    gradient.addColorStop(1, '#45b7d1');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add some shapes
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.beginPath();
+    ctx.arc(100, 100, 50, 0, Math.PI * 2);
+    ctx.fill();
+    
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.fillRect(200, 150, 150, 100);
+    
+    // Convert to image
+    const img = new Image();
+    img.onload = () => {
+      setOriginalImage(img);
+      drawOriginalToCanvas(img);
+      addToHistory([]);
+    };
+    img.src = canvas.toDataURL();
+  };
 
   const handleUpload = (e) => {
     const file = e.target.files?.[0];
@@ -35,6 +209,8 @@ export default function ImageProcessingGamePage() {
     img.onload = () => {
       setOriginalImage(img);
       drawOriginalToCanvas(img);
+      setPipeline([]);
+      addToHistory([]);
     };
     img.src = url;
   };
@@ -59,41 +235,138 @@ export default function ImageProcessingGamePage() {
     return { data: dst, width, height };
   };
 
+  const addToHistory = (newPipeline) => {
+    const newHistory = history.slice(0, historyIndex + 1);
+    newHistory.push(JSON.parse(JSON.stringify(newPipeline)));
+    setHistory(newHistory);
+    setHistoryIndex(newHistory.length - 1);
+  };
+
+  const undo = () => {
+    if (historyIndex > 0) {
+      const newIndex = historyIndex - 1;
+      setHistoryIndex(newIndex);
+      setPipeline(JSON.parse(JSON.stringify(history[newIndex])));
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+      const newIndex = historyIndex + 1;
+      setHistoryIndex(newIndex);
+      setPipeline(JSON.parse(JSON.stringify(history[newIndex])));
+    }
+  };
+
   useEffect(() => {
     applyPipeline();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pipeline, originalImage]);
+  }, [pipeline, originalImage, viewMode]);
 
   const addFilter = (type) => {
     const def = availableFilters.find(a => a.type === type);
     if (!def) return;
-    setPipeline(prev => [
-      ...prev,
-      { id: `${type}-${Date.now()}`, type, params: { ...def.defaults }, disabled: false },
-    ]);
+    const newFilter = { 
+      id: `${type}-${Date.now()}`, 
+      type, 
+      params: { ...def.defaults }, 
+      disabled: false 
+    };
+    const newPipeline = [...pipeline, newFilter];
+    setPipeline(newPipeline);
+    addToHistory(newPipeline);
   };
 
   const removeFilter = (id) => {
-    setPipeline(prev => prev.filter(f => f.id !== id));
+    const newPipeline = pipeline.filter(f => f.id !== id);
+    setPipeline(newPipeline);
+    addToHistory(newPipeline);
   };
+
   const toggleFilter = (id) => {
-    setPipeline(prev => prev.map(f => f.id === id ? { ...f, disabled: !f.disabled } : f));
+    const newPipeline = pipeline.map(f => f.id === id ? { ...f, disabled: !f.disabled } : f);
+    setPipeline(newPipeline);
+    addToHistory(newPipeline);
   };
+
   const updateParam = (id, key, value) => {
-    setPipeline(prev => prev.map(f => f.id === id ? { ...f, params: { ...f.params, [key]: value } } : f));
+    const newPipeline = pipeline.map(f => 
+      f.id === id ? { ...f, params: { ...f.params, [key]: value } } : f
+    );
+    setPipeline(newPipeline);
   };
-  const onDragStart = (idx) => { dragItemIndexRef.current = idx; };
-  const onDragOver = (e) => { e.preventDefault(); };
+
+  const onDragStart = (idx) => { 
+    dragItemIndexRef.current = idx; 
+  };
+
+  const onDragOver = (e) => { 
+    e.preventDefault(); 
+  };
+
   const onDrop = (idx) => {
     const from = dragItemIndexRef.current;
     if (from === null || from === idx) return;
-    setPipeline(prev => {
-      const next = [...prev];
-      const [moved] = next.splice(from, 1);
-      next.splice(idx, 0, moved);
-      return next;
-    });
+    const newPipeline = [...pipeline];
+    const [moved] = newPipeline.splice(from, 1);
+    newPipeline.splice(idx, 0, moved);
+    setPipeline(newPipeline);
+    addToHistory(newPipeline);
     dragItemIndexRef.current = null;
+  };
+
+  const applyPreset = (preset) => {
+    const newPipeline = preset.filters.map((f, idx) => ({
+      id: `${f.type}-${Date.now()}-${idx}`,
+      type: f.type,
+      params: { ...f.params },
+      disabled: false,
+    }));
+    setPipeline(newPipeline);
+    addToHistory(newPipeline);
+    setPresetMenuAnchor(null);
+  };
+
+  const exportPipeline = () => {
+    const exportData = {
+      version: '1.0',
+      pipeline: pipeline.map(f => ({
+        type: f.type,
+        params: f.params,
+        disabled: f.disabled,
+      })),
+    };
+    setImportText(JSON.stringify(exportData, null, 2));
+    setExportDialogOpen(true);
+  };
+
+  const importPipeline = () => {
+    try {
+      const data = JSON.parse(importText);
+      if (data.pipeline && Array.isArray(data.pipeline)) {
+        const newPipeline = data.pipeline.map((f, idx) => ({
+          id: `${f.type}-${Date.now()}-${idx}`,
+          type: f.type,
+          params: f.params || {},
+          disabled: f.disabled || false,
+        }));
+        setPipeline(newPipeline);
+        addToHistory(newPipeline);
+        setExportDialogOpen(false);
+        setImportText('');
+      }
+    } catch (e) {
+      alert('Lỗi: Dữ liệu không hợp lệ!');
+    }
+  };
+
+  const downloadResult = () => {
+    const canvas = resultCanvasRef.current;
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `processed-image-${Date.now()}.png`;
+    link.href = canvas.toDataURL();
+    link.click();
   };
 
   const applyPipeline = async () => {
@@ -110,15 +383,28 @@ export default function ImageProcessingGamePage() {
       const tmpCtx = tmpCanvas.getContext('2d', { willReadFrequently: true });
       tmpCtx.drawImage(srcCanvas, 0, 0);
       let { data: imgData } = copyImageData(tmpCtx);
+      
       for (const f of pipeline) {
         if (f.disabled) continue;
         imgData = await applyFilter(imgData, f);
       }
+      
       const outCtx = resultCanvasRef.current.getContext('2d');
       resultCanvasRef.current.width = w;
       resultCanvasRef.current.height = h;
       outCtx.putImageData(imgData, 0, 0);
+      
+      if (viewMode === 'split') {
+        const compareCtx = compareCanvasRef.current?.getContext('2d');
+        if (compareCanvasRef.current && compareCtx) {
+          compareCanvasRef.current.width = w;
+          compareCanvasRef.current.height = h;
+          compareCtx.drawImage(srcCanvas, 0, 0);
+        }
+      }
+      
       drawHistogram(imgData);
+      drawRgbHistogram(imgData);
     } finally {
       setIsApplying(false);
     }
@@ -147,7 +433,97 @@ export default function ImageProcessingGamePage() {
     }
   };
 
-  // Filters
+  const drawRgbHistogram = (imageData) => {
+    const canvas = histogramRgbCanvasRef.current;
+    if (!canvas) return;
+    const w = 256;
+    const h = 120;
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const histR = new Array(256).fill(0);
+    const histG = new Array(256).fill(0);
+    const histB = new Array(256).fill(0);
+    const d = imageData.data;
+    
+    for (let i = 0; i < d.length; i += 4) {
+      histR[d[i]]++;
+      histG[d[i + 1]]++;
+      histB[d[i + 2]]++;
+    }
+    
+    const maxV = Math.max(...histR, ...histG, ...histB) || 1;
+    ctx.fillStyle = '#111';
+    ctx.fillRect(0, 0, w, h);
+    
+    // Draw R channel
+    ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
+    for (let x = 0; x < 256; x++) {
+      const v = Math.round((histR[x] / maxV) * (h - 2));
+      ctx.fillRect(x, h - v, 1, v);
+    }
+    
+    // Draw G channel
+    ctx.fillStyle = 'rgba(0, 255, 0, 0.6)';
+    for (let x = 0; x < 256; x++) {
+      const v = Math.round((histG[x] / maxV) * (h - 2));
+      ctx.fillRect(x, h - v, 1, v);
+    }
+    
+    // Draw B channel
+    ctx.fillStyle = 'rgba(0, 0, 255, 0.6)';
+    for (let x = 0; x < 256; x++) {
+      const v = Math.round((histB[x] / maxV) * (h - 2));
+      ctx.fillRect(x, h - v, 1, v);
+    }
+  };
+
+  const calculateStats = (imageData) => {
+    const d = imageData.data;
+    let sumR = 0, sumG = 0, sumB = 0;
+    let sumR2 = 0, sumG2 = 0, sumB2 = 0;
+    const count = d.length / 4;
+    
+    for (let i = 0; i < d.length; i += 4) {
+      sumR += d[i];
+      sumG += d[i + 1];
+      sumB += d[i + 2];
+      sumR2 += d[i] * d[i];
+      sumG2 += d[i + 1] * d[i + 1];
+      sumB2 += d[i + 2] * d[i + 2];
+    }
+    
+    const meanR = sumR / count;
+    const meanG = sumG / count;
+    const meanB = sumB / count;
+    
+    const varianceR = (sumR2 / count) - (meanR * meanR);
+    const varianceG = (sumG2 / count) - (meanG * meanG);
+    const varianceB = (sumB2 / count) - (meanB * meanB);
+    
+    return {
+      meanR: meanR.toFixed(2),
+      meanG: meanG.toFixed(2),
+      meanB: meanB.toFixed(2),
+      stdR: Math.sqrt(varianceR).toFixed(2),
+      stdG: Math.sqrt(varianceG).toFixed(2),
+      stdB: Math.sqrt(varianceB).toFixed(2),
+    };
+  };
+
+  const [stats, setStats] = useState(null);
+
+  useEffect(() => {
+    if (resultCanvasRef.current && originalImage) {
+      const ctx = resultCanvasRef.current.getContext('2d');
+      const imageData = ctx.getImageData(0, 0, resultCanvasRef.current.width, resultCanvasRef.current.height);
+      if (imageData.data.length > 0) {
+        setStats(calculateStats(imageData));
+      }
+    }
+  }, [pipeline, originalImage, isApplying]);
+
+  // Filters implementation (keeping all existing filter functions)
   const applyFilter = async (imageData, filter) => {
     const { type, params } = filter;
     switch (type) {
@@ -210,6 +586,7 @@ export default function ImageProcessingGamePage() {
     }
     return [h, s, l];
   };
+
   const hue2rgb = (p, q, t) => {
     if (t < 0) t += 1;
     if (t > 1) t -= 1;
@@ -218,6 +595,7 @@ export default function ImageProcessingGamePage() {
     if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6;
     return p;
   };
+
   const hslToRgb = (h, s, l) => {
     let r, g, b;
     if (s === 0) {
@@ -326,7 +704,6 @@ export default function ImageProcessingGamePage() {
     for (let i = 0; i < kernel.length; i++) kernel[i] /= sum;
     const { width: w, height: h, data: d } = imageData;
     const tmp = new Uint8ClampedArray(d.length);
-    // horizontal
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         let r = 0, g = 0, b = 0, a = 0;
@@ -340,7 +717,6 @@ export default function ImageProcessingGamePage() {
         tmp[o] = r; tmp[o + 1] = g; tmp[o + 2] = b; tmp[o + 3] = a;
       }
     }
-    // vertical
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         let r = 0, g = 0, b = 0, a = 0;
@@ -449,166 +825,407 @@ export default function ImageProcessingGamePage() {
     return out;
   };
 
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
   return (
     <Box>
-      <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', md: '1fr 1fr 1fr' }, gap: 2 }}>
+      {/* Toolbar */}
+      <Paper sx={{ p: 2, mb: 2 }}>
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center', mb: 2 }}>
+          <Button variant="outlined" component="label" startIcon={<Upload />}>
+            Tải ảnh lên
+            <input type="file" accept="image/*" hidden onChange={handleUpload} />
+          </Button>
+          <Button variant="outlined" startIcon={<ImageIcon />} onClick={loadSampleImage}>
+            Ảnh mẫu
+          </Button>
+          <Button 
+            variant="outlined" 
+            startIcon={<FilterList />}
+            onClick={(e) => setPresetMenuAnchor(e.currentTarget)}
+          >
+            Preset
+          </Button>
+          <Button variant="outlined" startIcon={<Save />} onClick={exportPipeline}>
+            Export
+          </Button>
+          <Button variant="outlined" startIcon={<Upload />} onClick={() => setExportDialogOpen(true)}>
+            Import
+          </Button>
+          <Box sx={{ flex: 1 }} />
+          <IconButton disabled={!canUndo} onClick={undo} title="Undo">
+            <Undo />
+          </IconButton>
+          <IconButton disabled={!canRedo} onClick={redo} title="Redo">
+            <Redo />
+          </IconButton>
+          <Button
+            variant={viewMode === 'result' ? 'contained' : 'outlined'}
+            onClick={() => setViewMode('result')}
+            size="small"
+          >
+            Kết quả
+          </Button>
+          <Button
+            variant={viewMode === 'split' ? 'contained' : 'outlined'}
+            onClick={() => setViewMode('split')}
+            size="small"
+            startIcon={<CompareArrows />}
+          >
+            So sánh
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<Download />}
+            onClick={downloadResult}
+            disabled={!originalImage || isApplying}
+          >
+            Tải xuống
+          </Button>
+        </Box>
+
+        <Tabs value={selectedTab} onChange={(e, v) => setSelectedTab(v)}>
+          <Tab label="Bộ lọc" />
+          <Tab label="Thống kê" />
+          <Tab label="Histogram" />
+        </Tabs>
+      </Paper>
+
+      <Grid container spacing={2}>
         {/* Left: Ảnh gốc */}
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom>Ảnh gốc</Typography>
-          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 1 }}>
-            <Button variant="outlined" component="label">
-              Tải ảnh lên
-              <input type="file" accept="image/*" hidden onChange={handleUpload} />
-            </Button>
-          </Box>
-          <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-            <canvas ref={originalCanvasRef} style={{ width: '100%', display: 'block' }} />
-          </Box>
-          <Typography variant="caption" color="text.secondary">
-            Ảnh gốc là điểm tham chiếu cố định.
-          </Typography>
-        </Paper>
+        <Grid item xs={12} md={viewMode === 'split' ? 6 : 4}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom>Ảnh gốc</Typography>
+            <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden', position: 'relative' }}>
+              <canvas ref={originalCanvasRef} style={{ width: '100%', display: 'block' }} />
+              {!originalImage && (
+                <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
+                  <Typography>Chưa có ảnh</Typography>
+                  <Typography variant="caption">Tải ảnh lên hoặc chọn ảnh mẫu</Typography>
+                </Box>
+              )}
+            </Box>
+          </Paper>
+        </Grid>
 
         {/* Middle: Bảng điều khiển */}
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom>Bảng điều khiển</Typography>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Thêm bộ lọc</Typography>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-            {availableFilters.map(f => (
-              <Button key={f.type} size="small" variant="outlined" onClick={() => addFilter(f.type)}>
-                {f.name}
-              </Button>
-            ))}
-          </Box>
-          <Typography variant="subtitle2" sx={{ mb: 1 }}>Chuỗi bộ lọc (kéo-thả để sắp xếp)</Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-            {pipeline.length === 0 && (
-              <Typography variant="body2" color="text.secondary">Chưa có bộ lọc nào. Hãy thêm từ danh sách trên.</Typography>
-            )}
-            {pipeline.map((f, idx) => (
-              <Paper
-                key={f.id}
-                sx={{ p: 1.5, border: '1px dashed', borderColor: 'divider', bgcolor: f.disabled ? 'action.disabledBackground' : 'background.paper' }}
-                draggable
-                onDragStart={() => onDragStart(idx)}
-                onDragOver={onDragOver}
-                onDrop={() => onDrop(idx)}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
-                  <Typography variant="subtitle2">{availableFilters.find(a => a.type === f.type)?.name || f.type}</Typography>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button size="small" onClick={() => toggleFilter(f.id)}>{f.disabled ? 'Bật' : 'Tắt'}</Button>
-                    <Button size="small" color="error" onClick={() => removeFilter(f.id)}>Xóa</Button>
-                  </Box>
+        {selectedTab === 0 && (
+          <Grid item xs={12} md={viewMode === 'split' ? 6 : 4}>
+            <Paper sx={{ p: 2, maxHeight: '80vh', overflowY: 'auto' }}>
+              <Typography variant="h6" gutterBottom>Bảng điều khiển</Typography>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>Thêm bộ lọc</Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                {availableFilters.map(f => (
+                  <Tooltip key={f.type} title={f.description || ''} arrow>
+                    <Button 
+                      size="small" 
+                      variant="outlined" 
+                      onClick={() => addFilter(f.type)}
+                      endIcon={<Info fontSize="small" />}
+                    >
+                      {f.name}
+                    </Button>
+                  </Tooltip>
+                ))}
+              </Box>
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                Chuỗi bộ lọc ({pipeline.filter(f => !f.disabled).length}/{pipeline.length} đang bật)
+              </Typography>
+              {isApplying && (
+                <Box sx={{ display: 'flex', justifyContent: 'center', my: 2 }}>
+                  <CircularProgress size={24} />
                 </Box>
-                {/* Params */}
-                {f.type === 'brightnessContrast' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Brightness: {f.params.brightness}</Typography>
-                    <Slider value={f.params.brightness} min={-100} max={100} step={1} onChange={(_, v) => updateParam(f.id, 'brightness', v)} />
-                    <Typography variant="caption">Contrast: {f.params.contrast}</Typography>
-                    <Slider value={f.params.contrast} min={-100} max={100} step={1} onChange={(_, v) => updateParam(f.id, 'contrast', v)} />
-                  </Box>
+              )}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                {pipeline.length === 0 && (
+                  <Alert severity="info">
+                    Chưa có bộ lọc nào. Hãy thêm từ danh sách trên hoặc chọn preset.
+                  </Alert>
                 )}
-                {f.type === 'gamma' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Gamma: {f.params.gamma.toFixed(2)}</Typography>
-                    <Slider value={f.params.gamma} min={0.1} max={5} step={0.05} onChange={(_, v) => updateParam(f.id, 'gamma', v)} />
-                  </Box>
-                )}
-                {f.type === 'saturationHue' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Saturation: {f.params.saturation}</Typography>
-                    <Slider value={f.params.saturation} min={-100} max={100} step={1} onChange={(_, v) => updateParam(f.id, 'saturation', v)} />
-                    <Typography variant="caption">Hue: {f.params.hue}</Typography>
-                    <Slider value={f.params.hue} min={-180} max={180} step={1} onChange={(_, v) => updateParam(f.id, 'hue', v)} />
-                  </Box>
-                )}
-                {f.type === 'threshold' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Ngưỡng: {f.params.thresh}</Typography>
-                    <Slider value={f.params.thresh} min={0} max={255} step={1} onChange={(_, v) => updateParam(f.id, 'thresh', v)} />
-                  </Box>
-                )}
-                {f.type === 'mean' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Kernel: {f.params.kernel}x{f.params.kernel}</Typography>
-                    <Slider value={f.params.kernel} min={3} max={9} step={2} onChange={(_, v) => updateParam(f.id, 'kernel', v)} />
-                  </Box>
-                )}
-                {f.type === 'median' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Kernel: {f.params.kernel}x{f.params.kernel}</Typography>
-                    <Slider value={f.params.kernel} min={3} max={9} step={2} onChange={(_, v) => updateParam(f.id, 'kernel', v)} />
-                  </Box>
-                )}
-                {f.type === 'gaussian' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Sigma: {f.params.sigma.toFixed(2)}</Typography>
-                    <Slider value={f.params.sigma} min={0.1} max={5} step={0.1} onChange={(_, v) => updateParam(f.id, 'sigma', v)} />
-                  </Box>
-                )}
-                {f.type === 'sharpen' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Amount: {f.params.amount.toFixed(2)}</Typography>
-                    <Slider value={f.params.amount} min={0} max={2} step={0.05} onChange={(_, v) => updateParam(f.id, 'amount', v)} />
-                    <Typography variant="caption">Radius: {f.params.radius.toFixed(2)}</Typography>
-                    <Slider value={f.params.radius} min={0.2} max={5} step={0.1} onChange={(_, v) => updateParam(f.id, 'radius', v)} />
-                  </Box>
-                )}
-                {f.type === 'sobel' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Toán tử: {f.params.operator}</Typography>
-                    <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                      <Button size="small" variant={f.params.operator === 'sobel' ? 'contained' : 'outlined'} onClick={() => updateParam(f.id, 'operator', 'sobel')}>Sobel</Button>
-                      <Button size="small" variant={f.params.operator === 'prewitt' ? 'contained' : 'outlined'} onClick={() => updateParam(f.id, 'operator', 'prewitt')}>Prewitt</Button>
+                {pipeline.map((f, idx) => {
+                  const filterDef = availableFilters.find(a => a.type === f.type);
+                  return (
+                    <Paper
+                      key={f.id}
+                      sx={{ 
+                        p: 1.5, 
+                        border: '1px dashed', 
+                        borderColor: f.disabled ? 'error.main' : 'divider',
+                        bgcolor: f.disabled ? 'action.disabledBackground' : 'background.paper',
+                        opacity: f.disabled ? 0.6 : 1,
+                      }}
+                      draggable
+                      onDragStart={() => onDragStart(idx)}
+                      onDragOver={onDragOver}
+                      onDrop={() => onDrop(idx)}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Chip label={idx + 1} size="small" />
+                          <Typography variant="subtitle2">{filterDef?.name || f.type}</Typography>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Tooltip title={filterDef?.description || ''}>
+                            <IconButton size="small" onClick={(e) => {
+                              setFilterInfoAnchor(e.currentTarget);
+                              setSelectedFilterInfo(filterDef);
+                            }}>
+                              <Info fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Button size="small" onClick={() => toggleFilter(f.id)}>
+                            {f.disabled ? 'Bật' : 'Tắt'}
+                          </Button>
+                          <Button size="small" color="error" onClick={() => removeFilter(f.id)}>Xóa</Button>
+                        </Box>
+                      </Box>
+                      {/* Params rendering - keeping existing implementation */}
+                      {f.type === 'brightnessContrast' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Brightness: {f.params.brightness}</Typography>
+                          <Slider value={f.params.brightness} min={-100} max={100} step={1} onChange={(_, v) => updateParam(f.id, 'brightness', v)} />
+                          <Typography variant="caption">Contrast: {f.params.contrast}</Typography>
+                          <Slider value={f.params.contrast} min={-100} max={100} step={1} onChange={(_, v) => updateParam(f.id, 'contrast', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'gamma' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Gamma: {f.params.gamma.toFixed(2)}</Typography>
+                          <Slider value={f.params.gamma} min={0.1} max={5} step={0.05} onChange={(_, v) => updateParam(f.id, 'gamma', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'saturationHue' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Saturation: {f.params.saturation}</Typography>
+                          <Slider value={f.params.saturation} min={-100} max={100} step={1} onChange={(_, v) => updateParam(f.id, 'saturation', v)} />
+                          <Typography variant="caption">Hue: {f.params.hue}</Typography>
+                          <Slider value={f.params.hue} min={-180} max={180} step={1} onChange={(_, v) => updateParam(f.id, 'hue', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'threshold' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Ngưỡng: {f.params.thresh}</Typography>
+                          <Slider value={f.params.thresh} min={0} max={255} step={1} onChange={(_, v) => updateParam(f.id, 'thresh', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'mean' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Kernel: {f.params.kernel}x{f.params.kernel}</Typography>
+                          <Slider value={f.params.kernel} min={3} max={9} step={2} onChange={(_, v) => updateParam(f.id, 'kernel', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'median' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Kernel: {f.params.kernel}x{f.params.kernel}</Typography>
+                          <Slider value={f.params.kernel} min={3} max={9} step={2} onChange={(_, v) => updateParam(f.id, 'kernel', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'gaussian' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Sigma: {f.params.sigma.toFixed(2)}</Typography>
+                          <Slider value={f.params.sigma} min={0.1} max={5} step={0.1} onChange={(_, v) => updateParam(f.id, 'sigma', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'sharpen' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Amount: {f.params.amount.toFixed(2)}</Typography>
+                          <Slider value={f.params.amount} min={0} max={2} step={0.05} onChange={(_, v) => updateParam(f.id, 'amount', v)} />
+                          <Typography variant="caption">Radius: {f.params.radius.toFixed(2)}</Typography>
+                          <Slider value={f.params.radius} min={0.2} max={5} step={0.1} onChange={(_, v) => updateParam(f.id, 'radius', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'sobel' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Toán tử: {f.params.operator}</Typography>
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            <Button size="small" variant={f.params.operator === 'sobel' ? 'contained' : 'outlined'} onClick={() => updateParam(f.id, 'operator', 'sobel')}>Sobel</Button>
+                            <Button size="small" variant={f.params.operator === 'prewitt' ? 'contained' : 'outlined'} onClick={() => updateParam(f.id, 'operator', 'prewitt')}>Prewitt</Button>
+                          </Box>
+                        </Box>
+                      )}
+                      {f.type === 'canny' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Low threshold: {f.params.low}</Typography>
+                          <Slider value={f.params.low} min={0} max={255} step={1} onChange={(_, v) => updateParam(f.id, 'low', v)} />
+                          <Typography variant="caption">High threshold: {f.params.high}</Typography>
+                          <Slider value={f.params.high} min={0} max={255} step={1} onChange={(_, v) => updateParam(f.id, 'high', v)} />
+                        </Box>
+                      )}
+                      {f.type === 'jpeg' && (
+                        <Box sx={{ px: 1 }}>
+                          <Typography variant="caption">Quality: {f.params.quality}</Typography>
+                          <Slider value={f.params.quality} min={1} max={100} step={1} onChange={(_, v) => updateParam(f.id, 'quality', v)} />
+                        </Box>
+                      )}
+                    </Paper>
+                  );
+                })}
+              </Box>
+              <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
+                <Button disabled={pipeline.length === 0} variant="text" color="error" onClick={() => {
+                  setPipeline([]);
+                  addToHistory([]);
+                }}>
+                  <Delete /> Xóa tất cả
+                </Button>
+                <Button variant="text" onClick={() => {
+                  const ctx = originalCanvasRef.current?.getContext('2d');
+                  if (ctx && originalImage) {
+                    drawOriginalToCanvas(originalImage);
+                  }
+                }}>
+                  <Refresh /> Reset ảnh gốc
+                </Button>
+              </Box>
+            </Paper>
+          </Grid>
+        )}
+
+        {/* Statistics Tab */}
+        {selectedTab === 1 && (
+          <Grid item xs={12} md={viewMode === 'split' ? 6 : 8}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>Thống kê ảnh</Typography>
+              {stats ? (
+                <Grid container spacing={2}>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Paper sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText' }}>
+                      <Typography variant="subtitle2">Kênh R</Typography>
+                      <Typography variant="h6">Mean: {stats.meanR}</Typography>
+                      <Typography variant="body2">Std Dev: {stats.stdR}</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Paper sx={{ p: 2, bgcolor: 'success.light', color: 'success.contrastText' }}>
+                      <Typography variant="subtitle2">Kênh G</Typography>
+                      <Typography variant="h6">Mean: {stats.meanG}</Typography>
+                      <Typography variant="body2">Std Dev: {stats.stdG}</Typography>
+                    </Paper>
+                  </Grid>
+                  <Grid item xs={12} sm={6} md={4}>
+                    <Paper sx={{ p: 2, bgcolor: 'primary.light', color: 'primary.contrastText' }}>
+                      <Typography variant="subtitle2">Kênh B</Typography>
+                      <Typography variant="h6">Mean: {stats.meanB}</Typography>
+                      <Typography variant="body2">Std Dev: {stats.stdB}</Typography>
+                    </Paper>
+                  </Grid>
+                </Grid>
+              ) : (
+                <Alert severity="info">Chưa có dữ liệu thống kê. Vui lòng tải ảnh và áp dụng bộ lọc.</Alert>
+              )}
+            </Paper>
+          </Grid>
+        )}
+
+        {/* Histogram Tab */}
+        {selectedTab === 2 && (
+          <Grid item xs={12} md={viewMode === 'split' ? 6 : 8}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>Histogram</Typography>
+              <Paper sx={{ p: 2, mb: 2, bgcolor: 'background.default' }}>
+                <Typography variant="subtitle2" gutterBottom>Histogram Grayscale</Typography>
+                <canvas ref={histogramCanvasRef} style={{ width: '100%', height: 120 }} />
+              </Paper>
+              <Paper sx={{ p: 2, bgcolor: 'background.default' }}>
+                <Typography variant="subtitle2" gutterBottom>RGB Histogram</Typography>
+                <canvas ref={histogramRgbCanvasRef} style={{ width: '100%', height: 120 }} />
+                <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
+                  <Chip label="R" sx={{ bgcolor: 'rgba(255, 0, 0, 0.6)' }} />
+                  <Chip label="G" sx={{ bgcolor: 'rgba(0, 255, 0, 0.6)' }} />
+                  <Chip label="B" sx={{ bgcolor: 'rgba(0, 0, 255, 0.6)' }} />
+                </Box>
+              </Paper>
+            </Paper>
+          </Grid>
+        )}
+
+        {/* Right: Kết quả */}
+        {selectedTab === 0 && (
+          <Grid item xs={12} md={viewMode === 'split' ? 6 : 4}>
+            <Paper sx={{ p: 2 }}>
+              <Typography variant="h6" gutterBottom>Kết quả</Typography>
+              {viewMode === 'split' ? (
+                <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1 }}>
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Trước</Typography>
+                    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                      <canvas ref={compareCanvasRef} style={{ width: '100%', display: 'block' }} />
                     </Box>
                   </Box>
-                )}
-                {f.type === 'canny' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Low threshold: {f.params.low}</Typography>
-                    <Slider value={f.params.low} min={0} max={255} step={1} onChange={(_, v) => updateParam(f.id, 'low', v)} />
-                    <Typography variant="caption">High threshold: {f.params.high}</Typography>
-                    <Slider value={f.params.high} min={0} max={255} step={1} onChange={(_, v) => updateParam(f.id, 'high', v)} />
+                  <Box>
+                    <Typography variant="caption" color="text.secondary">Sau</Typography>
+                    <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                      <canvas ref={resultCanvasRef} style={{ width: '100%', display: 'block' }} />
+                    </Box>
                   </Box>
-                )}
-                {f.type === 'jpeg' && (
-                  <Box sx={{ px: 1 }}>
-                    <Typography variant="caption">Quality: {f.params.quality}</Typography>
-                    <Slider value={f.params.quality} min={1} max={100} step={1} onChange={(_, v) => updateParam(f.id, 'quality', v)} />
-                  </Box>
-                )}
-              </Paper>
-            ))}
-          </Box>
-          <Box sx={{ mt: 2, display: 'flex', gap: 1 }}>
-            <Button disabled={!originalImage || isApplying} variant="contained" onClick={applyPipeline}>
-              Áp dụng lại
-            </Button>
-            <Button disabled={pipeline.length === 0} variant="text" color="error" onClick={() => setPipeline([])}>
-              Xóa tất cả
-            </Button>
-          </Box>
-        </Paper>
+                </Box>
+              ) : (
+                <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
+                  <canvas ref={resultCanvasRef} style={{ width: '100%', display: 'block' }} />
+                </Box>
+              )}
+              {pipeline.length > 0 && (
+                <Alert severity="info" sx={{ mt: 2 }}>
+                  Đã áp dụng {pipeline.filter(f => !f.disabled).length} bộ lọc
+                </Alert>
+              )}
+            </Paper>
+          </Grid>
+        )}
+      </Grid>
 
-        {/* Right: Kết quả + Histogram */}
-        <Paper sx={{ p: 2 }}>
-          <Typography variant="h6" gutterBottom>Kết quả</Typography>
-          <Box sx={{ border: '1px solid', borderColor: 'divider', borderRadius: 1, overflow: 'hidden' }}>
-            <canvas ref={resultCanvasRef} style={{ width: '100%', display: 'block' }} />
-          </Box>
-          <Typography variant="caption" color="text.secondary">
-            Cập nhật theo thời gian thực sau khi áp dụng toàn bộ chuỗi bộ lọc.
-          </Typography>
-          <Paper sx={{ p: 2, mt: 2 }}>
-            <Typography variant="subtitle1" gutterBottom>Histogram</Typography>
-            <canvas ref={histogramCanvasRef} style={{ width: '100%', height: 120 }} />
-          </Paper>
-        </Paper>
-      </Box>
+      {/* Preset Menu */}
+      <Menu
+        anchorEl={presetMenuAnchor}
+        open={Boolean(presetMenuAnchor)}
+        onClose={() => setPresetMenuAnchor(null)}
+      >
+        {presets.map((preset, idx) => (
+          <MenuItem key={idx} onClick={() => applyPreset(preset)}>
+            {preset.name}
+          </MenuItem>
+        ))}
+      </Menu>
+
+      {/* Filter Info Menu */}
+      <Menu
+        anchorEl={filterInfoAnchor}
+        open={Boolean(filterInfoAnchor)}
+        onClose={() => setFilterInfoAnchor(null)}
+      >
+        {selectedFilterInfo && (
+          <MenuItem disabled>
+            <Box>
+              <Typography variant="subtitle2">{selectedFilterInfo.name}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {selectedFilterInfo.description}
+              </Typography>
+            </Box>
+          </MenuItem>
+        )}
+      </Menu>
+
+      {/* Export/Import Dialog */}
+      <Dialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} maxWidth="md" fullWidth>
+        <DialogTitle>Export/Import Pipeline</DialogTitle>
+        <DialogContent>
+          <TextField
+            fullWidth
+            multiline
+            rows={10}
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            label="JSON Pipeline Data"
+            placeholder="Paste pipeline JSON here to import..."
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setExportDialogOpen(false)}>Đóng</Button>
+          <Button onClick={importPipeline} variant="contained">Import</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
-
-

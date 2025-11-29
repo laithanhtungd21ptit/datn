@@ -1,5 +1,5 @@
 import React from 'react';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
 import ProtectedRoute from './auth/ProtectedRoute.jsx';
 import Login from './pages/Login/Login';
@@ -27,13 +27,21 @@ import ForgotPassword from './pages/Login/ForgotPassword';
 function App() {
   return (
     <Routes>
+      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="/login" element={<Login />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       {/* Full-screen exam route (no Layout) */}
        <Route path="/student/exams/:id" element={<StudentExamPage />} />
        {/* Full-screen practice game route (no Layout) */}
        <Route path="/student/practice/:subjectId/:gameId" element={<StudentPracticeGamePage />} />
-       <Route path="/" element={<Layout />}>
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute>
+            <Layout />
+          </ProtectedRoute>
+        }
+      >
         {/* Teacher Routes */}
         <Route path="teacher" element={<ProtectedRoute role="teacher"><TeacherDashboard /></ProtectedRoute>} />
         <Route path="teacher/classes" element={<ProtectedRoute role="teacher"><TeacherClasses /></ProtectedRoute>} />

@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { authRequired } from '../../middleware/auth.js';
+import { validate } from '../../middleware/validation.js';
 import { upload, useCloudinary } from '../../middleware/upload.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../../middleware/cloudinary.js';
 import { UserModel } from '../../models/User.js';
@@ -11,6 +12,7 @@ import { DocumentModel } from '../../models/Document.js';
 import { AnnouncementModel } from '../../models/Announcement.js';
 import { CommentModel } from '../../models/Comment.js';
 import { logUserActivity } from '../../utils/logger.js';
+import { normalizeNotificationSettings } from '../../constants/notificationSettings.js';
 
 const studentRouter = Router();
 
@@ -51,7 +53,8 @@ studentRouter.get('/dashboard', async (req, res) => {
       const submission = submissionMap[a._id.toString()];
       const isPastDue = new Date(a.dueDate) < now;
       const isSubmitted = submission && submission.submittedAt;
-      return !isPastDue && !isSubmitted;
+      const isExam = !!a.isExam;
+      return !isPastDue && !isSubmitted && !isExam;
     })
     .slice(0, 10) // Limit to 10
     .map(a => {
@@ -432,6 +435,11 @@ studentRouter.get('/assignments', async (req, res) => {
 
     const hasSubmission = submission && submission.submittedAt;
     const hasGrade = submission && submission.score != null;
+    const startTime = a.startTime || a.dueDate;
+    const duration = a.durationMinutes || 0;
+    const endTime = a.endTime || (duration ? new Date(new Date(startTime).getTime() + duration * 60000) : a.dueDate);
+    const now = new Date();
+    const isOverdue = new Date(a.dueDate) < now && !a.isExam;
 
     return {
     id: String(a._id),
@@ -442,8 +450,12 @@ studentRouter.get('/assignments', async (req, res) => {
     teacher: '', // Will be populated if needed
     isExam: !!a.isExam,
     durationMinutes: a.durationMinutes || null,
+      requireMonitoring: !!a.requireMonitoring,
+      startTime,
+      endTime,
       dueDate: a.dueDate,
       createdAt: a.createdAt,
+      isOverdue,
       mySubmission: hasSubmission ? {
         status: 'submitted',
         submittedAt: submission.submittedAt,
@@ -474,6 +486,44 @@ studentRouter.get('/classes/:id/assignments', async (req, res) => {
   if (!enrolled) return res.status(403).json({ error: 'FORBIDDEN' });
   const items = await AssignmentModel.find({ classId: id }).sort({ dueDate: 1 }).lean();
   res.json(items.map(a => ({ id: String(a._id), title: a.title, dueDate: a.dueDate, isExam: !!a.isExam, durationMinutes: a.durationMinutes })));
+});
+
+// Exam detail & status
+studentRouter.get('/exams/:id', async (req, res) => {
+  const { id } = req.params;
+  const studentId = req.user.id;
+
+  const assignment = await AssignmentModel.findById(id).lean();
+  if (!assignment || !assignment.isExam) return res.status(404).json({ error: 'EXAM_NOT_FOUND' });
+
+  const enrolled = await EnrollmentModel.exists({ classId: assignment.classId, studentId, status: 'enrolled' });
+  if (!enrolled) return res.status(403).json({ error: 'FORBIDDEN' });
+
+  const classInfo = await ClassModel.findById(assignment.classId).populate('teacherId', 'fullName').lean();
+  const startTime = assignment.startTime || assignment.dueDate;
+  const duration = assignment.durationMinutes || 0;
+  const endTime = assignment.endTime || (duration ? new Date(new Date(startTime).getTime() + duration * 60000) : new Date(startTime));
+  const now = new Date();
+
+  let status = 'waiting';
+  if (now >= endTime) {
+    status = 'ended';
+  } else if (now >= startTime) {
+    status = 'in_progress';
+  }
+
+  res.json({
+    id: String(assignment._id),
+    title: assignment.title,
+    description: assignment.description || '',
+    className: classInfo?.name || 'Unknown Class',
+    teacher: classInfo?.teacherId?.fullName || 'Giảng viên',
+    durationMinutes: duration,
+    requireMonitoring: !!assignment.requireMonitoring,
+    startTime,
+    endTime,
+    status
+  });
 });
 
 // Join class by code
@@ -510,6 +560,20 @@ studentRouter.post('/submissions', upload.array('files', 5), async (req, res) =>
   const { assignmentId, notes = '' } = req.body || {};
   if (!assignmentId) return res.status(400).json({ error: 'MISSING_ASSIGNMENT_ID' });
 
+  const assignment = await AssignmentModel.findById(assignmentId).lean();
+  if (!assignment) return res.status(404).json({ error: 'ASSIGNMENT_NOT_FOUND' });
+
+  const enrolled = await EnrollmentModel.exists({ classId: assignment.classId, studentId, status: 'enrolled' });
+  if (!enrolled) return res.status(403).json({ error: 'FORBIDDEN' });
+
+  if (assignment.isExam) {
+    return res.status(400).json({ error: 'EXAM_SUBMISSION_NOT_ALLOWED' });
+  }
+
+  if (new Date(assignment.dueDate) < new Date()) {
+    return res.status(400).json({ error: 'ASSIGNMENT_OVERDUE' });
+  }
+
   // Get uploaded file paths
   const fileUrls = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
 
@@ -531,7 +595,6 @@ studentRouter.post('/submissions', upload.array('files', 5), async (req, res) =>
 
   // Log submit assignment activity
   try {
-    const assignment = await AssignmentModel.findById(assignmentId).lean();
     await logUserActivity(
       studentId,
       'student',
@@ -641,6 +704,7 @@ studentRouter.put('/profile', async (req, res) => {
       avatar: user.avatar || '',
       lastLoginAt: user.lastLoginAt,
       createdAt: user.createdAt,
+    notificationSettings: normalizeNotificationSettings(user.notificationSettings),
       // Academic statistics
       stats: {
         totalAssignments: assignments.length,
@@ -656,6 +720,26 @@ studentRouter.put('/profile', async (req, res) => {
     console.error('Error updating profile:', error);
     res.status(500).json({ error: 'Failed to update profile' });
   }
+});
+
+studentRouter.get('/notifications/settings', async (req, res) => {
+  const user = await UserModel.findById(req.user.id).select('notificationSettings').lean();
+  res.json(normalizeNotificationSettings(user?.notificationSettings));
+});
+
+studentRouter.put('/notifications/settings', validate('notificationSettingsUpdate'), async (req, res) => {
+  const updates = Object.entries(req.body || {}).reduce((acc, [key, value]) => {
+    acc[`notificationSettings.${key}`] = value;
+    return acc;
+  }, {});
+
+  const user = await UserModel.findByIdAndUpdate(
+    req.user.id,
+    { $set: updates },
+    { new: true, select: 'notificationSettings' }
+  ).lean();
+
+  res.json(normalizeNotificationSettings(user?.notificationSettings));
 });
 
 // Upload avatar
@@ -755,6 +839,7 @@ studentRouter.get('/profile', async (req, res) => {
     avatar: user.avatar || '',
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
+    notificationSettings: normalizeNotificationSettings(user.notificationSettings),
     // Academic statistics
     stats: {
       totalAssignments: assignments.length,
@@ -801,6 +886,8 @@ studentRouter.get('/notifications', async (req, res) => {
   const studentId = req.user.id;
 
   const { NotificationModel } = await import('../../models/Notification.js');
+  const user = await UserModel.findById(studentId).select('lastNotificationReadAt').lean();
+  const lastReadAt = user?.lastNotificationReadAt ? new Date(user.lastNotificationReadAt) : null;
 
   // Get recent notifications (limit to 20)
   const notifications = await NotificationModel.find({
@@ -821,7 +908,7 @@ studentRouter.get('/notifications', async (req, res) => {
     time: new Date(notification.createdAt).toLocaleString('vi-VN'),
     class: notification.classId?.name || 'Unknown Class',
     sender: notification.senderId?.fullName || 'Giảng viên',
-    isRead: notification.isRead
+    isRead: notification.isRead || (lastReadAt ? notification.createdAt <= lastReadAt : false)
   }));
 
   res.json(formattedNotifications);
@@ -835,10 +922,19 @@ studentRouter.post('/notifications/:id/read', async (req, res) => {
   const { NotificationModel } = await import('../../models/Notification.js');
 
   try {
-    await NotificationModel.findOneAndUpdate(
+    const notification = await NotificationModel.findOneAndUpdate(
       { _id: id, recipientId: studentId },
-      { isRead: true }
+      { $set: { isRead: true, readAt: new Date() } },
+      { new: true, lean: true }
     );
+
+    if (notification?.createdAt) {
+      await UserModel.updateOne(
+        { _id: studentId },
+        { $max: { lastNotificationReadAt: notification.createdAt } }
+      );
+    }
+
     res.json({ success: true });
   } catch (error) {
     console.error('Error marking notification as read:', error);
@@ -853,9 +949,20 @@ studentRouter.post('/notifications/mark-all-read', async (req, res) => {
   const { NotificationModel } = await import('../../models/Notification.js');
 
   try {
+    const now = new Date();
     await NotificationModel.updateMany(
       { recipientId: studentId, isRead: false },
-      { isRead: true }
+      { $set: { isRead: true, readAt: now } }
+    );
+
+    const latest = await NotificationModel.findOne({ recipientId: studentId })
+      .sort({ createdAt: -1 })
+      .select('createdAt')
+      .lean();
+
+    await UserModel.updateOne(
+      { _id: studentId },
+      { $set: { lastNotificationReadAt: latest?.createdAt || now } }
     );
     res.json({ success: true });
   } catch (error) {
