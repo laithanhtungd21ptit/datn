@@ -246,7 +246,25 @@ adminRouter.get('/classes/:id', async (req, res) => {
 
 adminRouter.get('/classes', async (_req, res) => {
   const items = await ClassModel.find({}).sort({ createdAt: -1 }).lean();
-  res.json(items.map(c => ({ id: String(c._id), name: c.name, code: c.code, department: c.department, credits: c.credits, teacherId: String(c.teacherId) })));
+  const classesWithStats = await Promise.all(
+    items.map(async (c) => {
+      const [studentCount, assignmentCount] = await Promise.all([
+        EnrollmentModel.countDocuments({ classId: c._id }),
+        AssignmentModel.countDocuments({ classId: c._id })
+      ]);
+      return { 
+        id: String(c._id), 
+        name: c.name, 
+        code: c.code, 
+        department: c.department, 
+        credits: c.credits, 
+        teacherId: String(c.teacherId),
+        studentCount,
+        assignmentCount
+      };
+    })
+  );
+  res.json(classesWithStats);
 });
 
 adminRouter.post('/classes', async (req, res) => {

@@ -22,8 +22,12 @@ import {
   Alert,
   LinearProgress,
   TablePagination,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
-import { People, School, Assignment, TrendingUp, Refresh, Download, Notifications } from '@mui/icons-material';
+import { People, School, Assignment, TrendingUp, Refresh, Download, Notifications, Warning } from '@mui/icons-material';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { api } from '../../../api/client';
 
@@ -34,13 +38,72 @@ const AdminDashboard = () => {
   const [reports, setReports] = useState({ users: {}, classes: {}, assignments: {} });
   const [recentActivities, setRecentActivities] = useState([]);
   const [activitiesPage, setActivitiesPage] = useState(0);
-  const activitiesRowsPerPage = 10;
+  const [activitiesRowsPerPage, setActivitiesRowsPerPage] = useState(10);
   const [selectedReportType, setSelectedReportType] = useState('users');
   const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     loadDashboardData();
   }, []);
+
+  const translateActivity = (description) => {
+    if (!description) return '';
+    
+    const translations = {
+      'User admin logged in': 'Người dùng admin đăng nhập',
+      'Exported users report': 'Đã xuất báo cáo người dùng',
+      'Exported classes report': 'Đã xuất báo cáo lớp học',
+      'Exported assignments report': 'Đã xuất báo cáo bài tập',
+      'Created new class': 'Tạo lớp học mới',
+      'Updated class': 'Cập nhật lớp học',
+      'Deleted class': 'Xóa lớp học',
+      'Created new user': 'Tạo người dùng mới',
+      'Updated user': 'Cập nhật người dùng',
+      'Deleted user': 'Xóa người dùng',
+      'logged in': 'đăng nhập',
+      'Created assignment': 'Tạo bài tập',
+      'Updated assignment': 'Cập nhật bài tập',
+      'Deleted assignment': 'Xóa bài tập',
+      'Student submitted assignment': 'Sinh viên nộp bài tập',
+      'Teacher graded assignment': 'Giáo viên chấm bài tập',
+    };
+    
+    // Check direct translations first
+    if (translations[description]) {
+      return translations[description];
+    }
+    
+    // Handle pattern: "User {username} logged in" or "User {email} logged in"
+    const loginMatch = description.match(/^User\s+(.+?)\s+logged in$/);
+    if (loginMatch) {
+      const username = loginMatch[1];
+      return `Người dùng ${username} đăng nhập`;
+    }
+    
+    // Handle pattern: "Created assignment: {title}"
+    const createdAssignmentMatch = description.match(/^Created assignment:\s+(.+)$/);
+    if (createdAssignmentMatch) {
+      const title = createdAssignmentMatch[1];
+      return `Tạo bài tập: ${title}`;
+    }
+    
+    // Handle pattern: "Updated assignment: {title}"
+    const updatedAssignmentMatch = description.match(/^Updated assignment:\s+(.+)$/);
+    if (updatedAssignmentMatch) {
+      const title = updatedAssignmentMatch[1];
+      return `Cập nhật bài tập: ${title}`;
+    }
+    
+    // Handle pattern: "{action} class: {name}"
+    const classActionMatch = description.match(/^(Created|Updated|Deleted)\s+class:\s+(.+)$/);
+    if (classActionMatch) {
+      const actions = { 'Created': 'Tạo', 'Updated': 'Cập nhật', 'Deleted': 'Xóa' };
+      return `${actions[classActionMatch[1]]} lớp học: ${classActionMatch[2]}`;
+    }
+    
+    // Return original if no translation found
+    return description;
+  };
 
   const loadDashboardData = async () => {
     setLoading(true);
@@ -65,7 +128,7 @@ const AdminDashboard = () => {
       setRecentActivities(
         (activitiesData || []).map(activity => ({
           id: activity._id,
-          description: activity.description,
+          description: translateActivity(activity.description),
           timestamp: new Date(activity.createdAt).toLocaleString('vi-VN'),
         }))
       );
@@ -145,8 +208,9 @@ const AdminDashboard = () => {
           throw new Error('Loại báo cáo không hợp lệ');
       }
 
-      // Create and download CSV file
-      const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
+      // Create and download CSV file with UTF-8 BOM for Excel
+      const BOM = '\uFEFF';
+      const blob = new Blob([BOM + csvData], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -191,21 +255,7 @@ const AdminDashboard = () => {
             onClick={async () => {
               setExporting(true);
               try {
-                // Simple CSV export for now
-                let csvData = 'Tên,Số lượng\nTổng số,100\nĐã hoạt động,95';
-                let filename = `bao_cao_${selectedReportType}_${new Date().toISOString().split('T')[0]}.csv`;
-
-                const blob = new Blob([csvData], { type: 'text/csv;charset=utf-8;' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = filename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                await api.adminExportReport(selectedReportType);
+                await handleExportReport(selectedReportType);
               } catch (e) {
                 setError('Không thể xuất báo cáo: ' + e?.message);
               } finally {
@@ -265,11 +315,29 @@ const AdminDashboard = () => {
 
       <Grid container spacing={3}>
         {recentActivities.length > 0 && (
-          <Grid item xs={12} md={6}>
+          <Grid item xs={12} md={8}>
             <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Hoạt động gần đây
-              </Typography>
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6">
+                  Hoạt động gần đây
+                </Typography>
+                <FormControl size="small" sx={{ minWidth: 120 }}>
+                  <InputLabel>Số bản ghi</InputLabel>
+                  <Select
+                    value={activitiesRowsPerPage}
+                    onChange={(e) => {
+                      setActivitiesRowsPerPage(parseInt(e.target.value));
+                      setActivitiesPage(0);
+                    }}
+                    label="Số bản ghi"
+                  >
+                    <MenuItem value={5}>5 bản ghi</MenuItem>
+                    <MenuItem value={10}>10 bản ghi</MenuItem>
+                    <MenuItem value={15}>15 bản ghi</MenuItem>
+                    <MenuItem value={20}>20 bản ghi</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
               <List>
                 {recentActivities
                   .slice(
@@ -295,6 +363,48 @@ const AdminDashboard = () => {
             </Paper>
           </Grid>
         )}
+
+        {/* Fraud Warnings Section */}
+        <Grid item xs={12} md={4}>
+          <Paper sx={{ p: 2 }}>
+            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Warning color="error" />
+              Cảnh báo gian lận
+            </Typography>
+            <Box sx={{ mb: 2 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Lớp học</InputLabel>
+                <Select
+                  value={''}
+                  onChange={() => {}}
+                  label="Lớp học"
+                  disabled
+                >
+                  <MenuItem value="">Chọn lớp học</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Box sx={{ mb: 2 }}>
+              <FormControl fullWidth size="small">
+                <InputLabel>Bài thi</InputLabel>
+                <Select
+                  value={''}
+                  onChange={() => {}}
+                  label="Bài thi"
+                  disabled
+                >
+                  <MenuItem value="">Chọn bài thi</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+            <Alert severity="info" sx={{ mb: 2 }}>
+              Chức năng cảnh báo gian lận đang chờ triển khai. Sinh viên có thể gửi báo cáo gian lận trong quá trình thi.
+            </Alert>
+            <Typography variant="body2" color="text.secondary">
+              Chưa có báo cáo gian lận nào.
+            </Typography>
+          </Paper>
+        </Grid>
       </Grid>
     </Box>
   );

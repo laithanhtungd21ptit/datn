@@ -201,7 +201,7 @@ const AdminClassDetail = () => {
 
       {/* Stats Cards */}
       <Grid container spacing={{ xs: 2, sm: 3 }} sx={{ mb: 3 }}>
-        <Grid item xs={6} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ textAlign: 'center', p: { xs: 1.5, sm: 2 } }}>
               <Typography 
@@ -221,7 +221,7 @@ const AdminClassDetail = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ textAlign: 'center', p: { xs: 1.5, sm: 2 } }}>
               <Typography 
@@ -241,7 +241,7 @@ const AdminClassDetail = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ textAlign: 'center', p: { xs: 1.5, sm: 2 } }}>
               <Typography 
@@ -261,12 +261,12 @@ const AdminClassDetail = () => {
             </CardContent>
           </Card>
         </Grid>
-        <Grid item xs={6} sm={6} md={3}>
+        <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ height: '100%' }}>
             <CardContent sx={{ textAlign: 'center', p: { xs: 1.5, sm: 2 } }}>
               <Typography 
                 variant="h4" 
-                color="error.main"
+                color="info.main"
                 sx={{ fontSize: { xs: '1.5rem', sm: '2.125rem' } }}
               >
                 {students.filter(s => s.assignmentsCompleted < s.assignmentsTotal * 0.5).length}
@@ -276,7 +276,7 @@ const AdminClassDetail = () => {
                 color="text.secondary"
                 sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}
               >
-                Cần hỗ trợ
+                Cần cải thiện
               </Typography>
             </CardContent>
           </Card>
@@ -313,12 +313,6 @@ const AdminClassDetail = () => {
                       Mã lớp học:
                     </Typography>
                     <Typography variant="body1">{classData.code}</Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="subtitle2" color="text.secondary">
-                      Môn học:
-                    </Typography>
-                    <Typography variant="body1">{classData.subject}</Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
                     <Typography variant="subtitle2" color="text.secondary">
@@ -385,15 +379,6 @@ const AdminClassDetail = () => {
                     <ListItemText 
                       primary="Sinh viên hoạt động" 
                       secondary={`${students.filter(s => s.status === 'active').length} sinh viên`} 
-                    />
-                  </ListItem>
-                  <ListItem>
-                    <ListItemIcon>
-                      <Warning color="warning" />
-                    </ListItemIcon>
-                    <ListItemText 
-                      primary="Cần hỗ trợ" 
-                      secondary={`${students.filter(s => s.assignmentsCompleted < s.assignmentsTotal * 0.5).length} sinh viên`} 
                     />
                   </ListItem>
                 </List>

@@ -113,7 +113,7 @@ const Layout = () => {
   ];
 
   const adminMenuItems = [
-    { text: 'Dashboard', icon: <Dashboard />, path: '/admin' },
+    { text: 'Tổng quan', icon: <Dashboard />, path: '/admin' },
     { text: 'Quản lý tài khoản', icon: <Person />, path: '/admin/accounts' },
     { text: 'Lớp học/Môn học', icon: <School />, path: '/admin/classes' },
   ];

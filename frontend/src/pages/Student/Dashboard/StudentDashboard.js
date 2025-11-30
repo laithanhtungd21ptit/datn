@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Grid,
   Paper,
@@ -35,6 +36,7 @@ import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pi
 import { api } from '../../../api/client';
 
 const StudentDashboard = () => {
+  const navigate = useNavigate();
 
   const [openDeadlineDialog, setOpenDeadlineDialog] = useState(false);
   const [selectedDeadline, setSelectedDeadline] = useState(null);
@@ -750,7 +752,13 @@ const StudentDashboard = () => {
           <Button onClick={() => setOpenDeadlineDialog(false)}>
             Đóng
           </Button>
-          <Button variant="contained">
+          <Button 
+            variant="contained"
+            onClick={() => {
+              setOpenDeadlineDialog(false);
+              navigate('/student/assignments');
+            }}
+          >
             Xem trong Bài tập
           </Button>
         </DialogActions>

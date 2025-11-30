@@ -31,6 +31,7 @@ const StudentClasses = () => {
   const [classes, setClasses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
 
 
 
@@ -73,7 +74,11 @@ const StudentClasses = () => {
     navigate(`/student/classes/${classItem.id}`);
   };
 
-
+  const filteredClasses = classes.filter(classItem =>
+    classItem.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    classItem.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    classItem.teacher.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   return (
     <Box>
@@ -90,9 +95,21 @@ const StudentClasses = () => {
         </Button>
       </Box>
 
+      {/* Search Filter */}
+      <Box sx={{ mb: 3 }}>
+        <TextField
+          fullWidth
+          placeholder="Tìm kiếm lớp học theo tên, mã lớp hoặc giảng viên..."
+          variant="outlined"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          sx={{ maxWidth: 400 }}
+        />
+      </Box>
+
       {/* Classes Grid */}
       <Grid container spacing={3}>
-        {classes.map((classItem) => (
+        {filteredClasses.map((classItem) => (
           <Grid item xs={12} sm={6} md={4} key={classItem.id}>
             <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
               <CardContent sx={{ flexGrow: 1, cursor: 'pointer' }} onClick={() => navigate(`/student/classes/${classItem.id}`)}>

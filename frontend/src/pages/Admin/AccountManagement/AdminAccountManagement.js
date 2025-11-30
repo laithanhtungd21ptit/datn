@@ -137,24 +137,45 @@ const AdminAccountManagement = () => {
   };
 
   const handleExportCsv = () => {
-    const rows = filteredUsers.map(u => ({
+    // Export tất cả users đã tải về, không chỉ filteredUsers
+    const rows = users.map(u => ({
       username: u.username,
       fullName: u.fullName,
       email: u.email,
-      role: u.role,
-      status: u.status,
+      role: getRoleText(u.role),
+      status: u.status === 'active' ? 'Hoạt động' : 'Không hoạt động',
       phone: u.phone || '',
       department: u.department || '',
-      createdAt: u.createdAt || '',
-      lastLogin: u.lastLogin || '',
+      createdAt: u.createdAt ? dayjs(u.createdAt).locale('vi').format('DD/MM/YYYY HH:mm') : '',
+      lastLogin: u.lastLogin ? dayjs(u.lastLogin).locale('vi').format('DD/MM/YYYY HH:mm') : 'Chưa đăng nhập',
     }));
-    const header = ['username','fullName','email','role','status','phone','department','createdAt','lastLogin'];
-    const csv = [header.join(','), ...rows.map(r => header.map(h => `"${String(r[h] ?? '').replace(/"/g,'""')}"`).join(','))].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    
+    // Mapping giữa header tiếng Việt và key tiếng Anh
+    const headerMapping = {
+      'Tên đăng nhập': 'username',
+      'Họ và tên': 'fullName', 
+      'Email': 'email',
+      'Vai trò': 'role',
+      'Trạng thái': 'status',
+      'Số điện thoại': 'phone',
+      'Khoa/Bộ môn': 'department',
+      'Ngày tạo': 'createdAt',
+      'Đăng nhập cuối': 'lastLogin'
+    };
+    
+    const headers = Object.keys(headerMapping);
+    const csv = [
+      headers.join(','),
+      ...rows.map(r => headers.map(h => `"${String(r[headerMapping[h]] ?? '').replace(/"/g,'""')}"`).join(','))
+    ].join('\n');
+    
+    // Add UTF-8 BOM for proper Vietnamese character encoding in Excel
+    const BOM = '\uFEFF';
+    const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'accounts.csv';
+    a.download = 'danh-sach-tai-khoan.csv';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -483,7 +504,7 @@ const AdminAccountManagement = () => {
           <Tab label="Tất cả tài khoản" />
           <Tab label="Giảng viên" />
           <Tab label="Sinh viên" />
-          <Tab label="Admin" />
+          <Tab label="Quản trị viên" />
         </Tabs>
       </Paper>
 
@@ -510,7 +531,7 @@ const AdminAccountManagement = () => {
                 label="Vai trò"
               >
                 <MenuItem value="all">Tất cả</MenuItem>
-                <MenuItem value="admin">Admin</MenuItem>
+                <MenuItem value="admin">Quản trị viên</MenuItem>
                 <MenuItem value="teacher">Giảng viên</MenuItem>
                 <MenuItem value="student">Sinh viên</MenuItem>
               </Select>
@@ -667,7 +688,7 @@ const AdminAccountManagement = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Username"
+                label="Tên đăng nhập"
                 value={newUser.username}
                 onChange={(e) => setNewUser(prev => ({ ...prev, username: e.target.value }))}
               />
@@ -683,7 +704,7 @@ const AdminAccountManagement = () => {
             <Grid item xs={12} sm={6}>
               <TextField
                 fullWidth
-                label="Email"
+                label="Địa chỉ email"
                 type="email"
                 value={newUser.email}
                 onChange={(e) => setNewUser(prev => ({ ...prev, email: e.target.value }))}
@@ -707,7 +728,7 @@ const AdminAccountManagement = () => {
                 >
                   <MenuItem value="student">Sinh viên</MenuItem>
                   <MenuItem value="teacher">Giảng viên</MenuItem>
-                  <MenuItem value="admin">Admin</MenuItem>
+                  <MenuItem value="admin">Quản trị viên</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -814,7 +835,7 @@ const AdminAccountManagement = () => {
             <Grid item xs={12}>
               <TextField
                 fullWidth
-                label="Email"
+                label="Địa chỉ email"
                 type="email"
                 value={editingUser.email}
                 onChange={(e) => setEditingUser(prev => ({ ...prev, email: e.target.value }))}
@@ -830,7 +851,7 @@ const AdminAccountManagement = () => {
                 >
                   <MenuItem value="student">Sinh viên</MenuItem>
                   <MenuItem value="teacher">Giảng viên</MenuItem>
-                  <MenuItem value="admin">Admin</MenuItem>
+                  <MenuItem value="admin">Quản trị viên</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
