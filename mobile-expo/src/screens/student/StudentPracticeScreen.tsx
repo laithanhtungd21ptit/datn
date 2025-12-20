@@ -1,78 +1,49 @@
 import React from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import {
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { colors } from '../../theme/colors';
 
-const practiceModules = [
-  {
-    id: 'image',
-    title: 'Xử lý hình ảnh',
-    description: 'Ôn tập histogram, bộ lọc, nhận dạng biên.',
-  },
-  {
-    id: 'audio',
-    title: 'Xử lý âm thanh',
-    description: 'Thực hành equalizer, noise reduction.',
-  },
-  {
-    id: 'photo',
-    title: 'Nhiếp ảnh',
-    description: 'Bài tập phơi sáng, bố cục.',
-  },
-  {
-    id: 'video',
-    title: 'Quay dựng video',
-    description: 'Bố cục khung hình, chuyển cảnh, storyboard.',
-  },
-  {
-    id: 'graphics',
-    title: 'Kỹ thuật đồ họa',
-    description: 'Thiết kế đồ họa, xử lý vector, màu sắc và bố cục.',
-  },
-];
-
-const StudentPracticeScreen: React.FC = () => (
-  <View style={styles.container}>
-    <Text style={styles.title}>Khu vực thực hành</Text>
-    <Text style={styles.subtitle}>
-      Chọn một module để luyện tập. Các bài tập tương tác sẽ được mở trong bản
-      cập nhật tiếp theo.
-    </Text>
-    {practiceModules.map(module => (
-      <View key={module.id} style={styles.card}>
-        <Text style={styles.cardTitle}>{module.title}</Text>
-        <Text style={styles.cardDescription}>{module.description}</Text>
-        <View style={styles.pill}>
-          <Text style={styles.pillText}>Sắp ra mắt</Text>
-        </View>
+const StudentPracticeScreen: React.FC = () => {
+  return (
+    <View style={styles.container}>
+      <View style={styles.content}>
+        <Text style={styles.title}>Hệ thống đang phát triển</Text>
+        <Text style={styles.subtitle}>
+          Tính năng thực hành đang được phát triển và sẽ sớm ra mắt trên thiết bị di động.
+        </Text>
       </View>
-    ))}
-  </View>
-);
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: colors.background, padding: 16 },
-  title: { fontSize: 24, fontWeight: '700', color: colors.secondary },
-  subtitle: { color: colors.textSecondary, marginTop: 6, marginBottom: 20 },
-  card: {
-    backgroundColor: colors.surface,
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: colors.primaryLight,
+  container: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
   },
-  cardTitle: { fontSize: 18, fontWeight: '600', color: colors.secondary },
-  cardDescription: { color: colors.textSecondary, marginTop: 6 },
-  pill: {
-    marginTop: 12,
-    alignSelf: 'flex-start',
-    backgroundColor: colors.primaryLight,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
+  content: {
+    alignItems: 'center',
+    maxWidth: 300,
   },
-  pillText: { color: colors.primaryDark, fontWeight: '600' },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.secondary,
+    marginBottom: 16,
+    textAlign: 'center',
+  },
+  subtitle: {
+    fontSize: 16,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 24,
+  },
 });
 
 export default StudentPracticeScreen;
-

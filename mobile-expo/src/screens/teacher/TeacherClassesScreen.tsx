@@ -94,7 +94,6 @@ const TeacherClassesScreen: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [selectedClass, setSelectedClass] = useState<ClassDetail | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [showEditAssignmentModal, setShowEditAssignmentModal] = useState(false);
@@ -116,11 +115,6 @@ const TeacherClassesScreen: React.FC = () => {
   }>>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<typeof submissions[0] | null>(null);
   const [gradingData, setGradingData] = useState({ grade: '', comment: '' });
-  const [createForm, setCreateForm] = useState({
-    name: '',
-    code: '',
-    description: '',
-  });
   const [notificationForm, setNotificationForm] = useState({
     title: '',
     content: '',
@@ -246,22 +240,6 @@ const TeacherClassesScreen: React.FC = () => {
     }
   };
 
-  const handleCreateClass = async () => {
-    if (!createForm.name || !createForm.code) {
-      Alert.alert('Lỗi', 'Vui lòng nhập đầy đủ tên và mã lớp');
-      return;
-    }
-    try {
-      await api.teacherCreateClass?.(createForm);
-      setCreateForm({ name: '', code: '', description: '' });
-      setShowCreateModal(false);
-      await loadClasses();
-      Alert.alert('Thành công', 'Đã tạo lớp học mới');
-    } catch (error) {
-      console.warn('Không thể tạo lớp:', error);
-      Alert.alert('Lỗi', 'Không thể tạo lớp học mới');
-    }
-  };
 
   const handleSendNotification = async () => {
     if (!selectedClass || !notificationForm.title || !notificationForm.content) {
@@ -604,12 +582,6 @@ const TeacherClassesScreen: React.FC = () => {
   <View style={styles.container}>
       <View style={styles.header}>
     <Text style={styles.title}>Quản lý lớp học</Text>
-        <TouchableOpacity
-          style={styles.createButton}
-          onPress={() => setShowCreateModal(true)}
-        >
-          <Text style={styles.createButtonText}>+ Tạo lớp</Text>
-        </TouchableOpacity>
       </View>
 
       {loading ? (
@@ -1012,70 +984,6 @@ const TeacherClassesScreen: React.FC = () => {
         </View>
       </Modal>
 
-      {/* Create Class Modal */}
-      <Modal
-        visible={showCreateModal}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setShowCreateModal(false)}
-        >
-        <KeyboardAvoidingView
-          style={styles.modalOverlay}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-        >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Tạo lớp học mới</Text>
-                <ScrollView 
-                  showsVerticalScrollIndicator={false}
-                  keyboardShouldPersistTaps="handled"
-                  style={{ maxHeight: 400 }}
-                >
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Tên lớp học *</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Ví dụ: Lập trình Web"
-                      value={createForm.name}
-                      onChangeText={value => setCreateForm(prev => ({ ...prev, name: value }))}
-    />
-  </View>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Mã lớp học *</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Ví dụ: WEB101"
-                      value={createForm.code}
-                      onChangeText={value => setCreateForm(prev => ({ ...prev, code: value }))}
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Mô tả (tùy chọn)</Text>
-                    <TextInput
-                      style={[styles.input, { height: 80 }]}
-                      placeholder="Nhập mô tả về lớp học..."
-                      multiline
-                      value={createForm.description}
-                      onChangeText={value => setCreateForm(prev => ({ ...prev, description: value }))}
-                    />
-                  </View>
-                </ScrollView>
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.modalButton} onPress={handleCreateClass}>
-                    <Text style={styles.modalButtonText}>Tạo lớp</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.modalCancel}
-                    onPress={() => setShowCreateModal(false)}
-                  >
-                    <Text style={styles.modalCancelText}>Hủy</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-        </KeyboardAvoidingView>
-      </Modal>
 
       {/* Notification Modal */}
       <Modal
@@ -1094,44 +1002,44 @@ const TeacherClassesScreen: React.FC = () => {
         >
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-                <Text style={styles.modalTitle}>Gửi thông báo</Text>
-                <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Tiêu đề *</Text>
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Nhập tiêu đề thông báo"
-                      value={notificationForm.title}
-                      onChangeText={value => setNotificationForm(prev => ({ ...prev, title: value }))}
-                    />
-                  </View>
-                  <View style={styles.inputGroup}>
-                    <Text style={styles.inputLabel}>Nội dung *</Text>
-                    <TextInput
-                      style={[styles.input, { height: 100 }]}
-                      placeholder="Nhập nội dung thông báo..."
-                      multiline
-                      value={notificationForm.content}
-                      onChangeText={value => setNotificationForm(prev => ({ ...prev, content: value }))}
-                    />
-                  </View>
-                </ScrollView>
-                <View style={styles.modalActions}>
-                  <TouchableOpacity style={styles.modalButton} onPress={handleSendNotification}>
-                    <Text style={styles.modalButtonText}>Gửi</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={styles.modalCancel}
-                    onPress={() => {
-                      setShowNotificationModal(false);
-                      setNotificationForm({ title: '', content: '', type: 'general' });
-                    }}
-                  >
-                    <Text style={styles.modalCancelText}>Hủy</Text>
-                  </TouchableOpacity>
+              <Text style={styles.modalTitle}>Gửi thông báo</Text>
+              <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Tiêu đề *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Nhập tiêu đề thông báo"
+                    value={notificationForm.title}
+                    onChangeText={value => setNotificationForm(prev => ({ ...prev, title: value }))}
+                  />
                 </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Nội dung *</Text>
+                  <TextInput
+                    style={[styles.input, { height: 100 }]}
+                    placeholder="Nhập nội dung thông báo..."
+                    multiline
+                    value={notificationForm.content}
+                    onChangeText={value => setNotificationForm(prev => ({ ...prev, content: value }))}
+                  />
+                </View>
+              </ScrollView>
+              <View style={styles.modalActions}>
+                <TouchableOpacity style={styles.modalButton} onPress={handleSendNotification}>
+                  <Text style={styles.modalButtonText}>Gửi</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.modalCancel}
+                  onPress={() => {
+                    setShowNotificationModal(false);
+                    setNotificationForm({ title: '', content: '', type: 'general' });
+                  }}
+                >
+                  <Text style={styles.modalCancelText}>Hủy</Text>
+                </TouchableOpacity>
               </View>
             </View>
+          </View>
         </KeyboardAvoidingView>
       </Modal>
 

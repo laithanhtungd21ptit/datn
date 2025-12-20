@@ -204,7 +204,6 @@ const TransformableObject = ({ data }) => {
           anchorY="bottom"
           outlineWidth={0.02}
           outlineColor="#000000"
-          font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxM.woff"
         >
           {data.label}
         </Text>
@@ -254,37 +253,37 @@ const DynamicAxes = ({ objects }) => {
       {range.map(v => (
         <group key={`x-${v}`} position={[v, 0, 0]}>
           <Line points={[[0, -0.15, 0], [0, 0.15, 0]]} color={colors.x} lineWidth={1} />
-          <Text position={[0, -0.5, 0]} fontSize={0.25} color={colors.x} font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxM.woff">{v}</Text>
+          <Text position={[0, -0.5, 0]} fontSize={0.25} color={colors.x}>{v}</Text>
         </group>
       ))}
-      <Text position={[maxCoord + 1.8, 0, 0]} fontSize={0.6} color={colors.x} font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxM.woff">X</Text>
+      <Text position={[maxCoord + 1.8, 0, 0]} fontSize={0.6} color={colors.x}>X</Text>
       
       {/* Y Axis */}
       <Line points={[[0, -maxCoord - 1, 0], [0, maxCoord + 1, 0]]} color={colors.y} lineWidth={2} />
       {range.map(v => (
         <group key={`y-${v}`} position={[0, v, 0]}>
           <Line points={[[-0.15, 0, 0], [0.15, 0, 0]]} color={colors.y} lineWidth={1} />
-          <Text position={[-0.6, 0, 0]} fontSize={0.25} color={colors.y} font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxM.woff">{v}</Text>
+          <Text position={[-0.6, 0, 0]} fontSize={0.25} color={colors.y}>{v}</Text>
         </group>
       ))}
-      <Text position={[0, maxCoord + 1.8, 0]} fontSize={0.6} color={colors.y} font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxM.woff">Y</Text>
+      <Text position={[0, maxCoord + 1.8, 0]} fontSize={0.6} color={colors.y}>Y</Text>
       
       {/* Z Axis */}
       <Line points={[[0, 0, -maxCoord - 1], [0, 0, maxCoord + 1]]} color={colors.z} lineWidth={2} />
       {range.map(v => (
         <group key={`z-${v}`} position={[0, 0, v]}>
           <Line points={[[-0.15, 0, 0], [0.15, 0, 0]]} color={colors.z} lineWidth={1} />
-          <Text position={[-0.5, 0.3, 0]} fontSize={0.25} color={colors.z} rotation={[0, Math.PI / 4, 0]} font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxM.woff">{v}</Text>
+          <Text position={[-0.5, 0.3, 0]} fontSize={0.25} color={colors.z} rotation={[0, Math.PI / 4, 0]}>{v}</Text>
         </group>
       ))}
-      <Text position={[0, 0, maxCoord + 1.8]} fontSize={0.6} color={colors.z} font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxM.woff">Z</Text>
+      <Text position={[0, 0, maxCoord + 1.8]} fontSize={0.6} color={colors.z}>Z</Text>
 
       {/* Origin */}
       <mesh position={[0, 0, 0]}>
         <sphereGeometry args={[0.15, 16, 16]} />
         <meshBasicMaterial color="white" />
       </mesh>
-      <Text position={[-0.5, -0.5, 0]} fontSize={0.35} color="white" font="https://fonts.gstatic.com/s/roboto/v18/KFOmCnqEu92Fr1Mu4mxM.woff">O(0,0,0)</Text>
+      <Text position={[-0.5, -0.5, 0]} fontSize={0.35} color="white">O(0,0,0)</Text>
     </group>
   );
 };

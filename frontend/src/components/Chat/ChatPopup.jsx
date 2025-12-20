@@ -224,13 +224,42 @@ const ChatPopup = () => {
   const [attachedFiles, setAttachedFiles] = useState([]);
   const typingTimeoutRef = useRef(null);
 
+  const socketRef = useRef(null);
+  const currentConversationIdRef = useRef(null);
+  const currentUserIdRef = useRef(null);
+  const joinedConversationIdRef = useRef(null);
+
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const imageInputRef = useRef(null);
 
+  useEffect(() => {
+    currentUserIdRef.current = currentUser?.id || null;
+  }, [currentUser]);
+
+  useEffect(() => {
+    currentConversationIdRef.current = currentConversation?.id || null;
+
+    const activeSocket = socketRef.current;
+    if (!activeSocket) return;
+
+    const nextConversationId = currentConversation?.id;
+    const prevConversationId = joinedConversationIdRef.current;
+
+    if (prevConversationId && prevConversationId !== nextConversationId) {
+      activeSocket.emit('leave_conversation', prevConversationId);
+      joinedConversationIdRef.current = null;
+    }
+
+    if (nextConversationId && prevConversationId !== nextConversationId) {
+      activeSocket.emit('join_conversation', nextConversationId);
+      joinedConversationIdRef.current = nextConversationId;
+    }
+  }, [currentConversation]);
+
   // Initialize socket connection
   useEffect(() => {
-    if (currentUser && !socket) {
+    if (currentUser && !socketRef.current) {
       const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
       
       // Disable Socket.IO on Vercel production (not supported on serverless)
@@ -257,23 +286,24 @@ const ChatPopup = () => {
 
       newSocket.on('new_message', (data) => {
         const { conversationId, message } = data;
-        if (currentConversation && currentConversation.id === conversationId) {
+        if (currentConversationIdRef.current === conversationId) {
           setMessages(prev => [...prev, message]);
+        } else if (message?.senderId !== currentUserIdRef.current) {
+          setUnreadCount(prev => prev + 1);
         }
         // Update conversations list
         loadConversations();
-        setUnreadCount(prev => prev + 1);
       });
 
       // Typing indicators
       newSocket.on('user_typing', (data) => {
-        if (currentConversation && currentConversation.id === data.conversationId) {
+        if (currentConversationIdRef.current === data.conversationId) {
           setTypingUsers(prev => new Map(prev.set(data.userId, data.username)));
         }
       });
 
       newSocket.on('user_stopped_typing', (data) => {
-        if (currentConversation && currentConversation.id === data.conversationId) {
+        if (currentConversationIdRef.current === data.conversationId) {
           setTypingUsers(prev => {
             const newMap = new Map(prev);
             newMap.delete(data.userId);
@@ -282,13 +312,14 @@ const ChatPopup = () => {
         }
       });
 
+      socketRef.current = newSocket;
       setSocket(newSocket);
     }
 
     return () => {
-      if (socket) {
-        socket.disconnect();
-      }
+      const activeSocket = socketRef.current;
+      if (activeSocket) activeSocket.disconnect();
+      socketRef.current = null;
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current);
       }
@@ -475,10 +506,7 @@ const ChatPopup = () => {
 
     // Set new timeout to stop typing
     typingTimeoutRef.current = setTimeout(() => {
-      socket.emit('stop_typing', {
-        conversationId: currentConversation.id,
-        userId: currentUser.id
-      });
+      socket.emit('typing_stop', currentConversation.id);
       setIsTyping(false);
     }, 1000);
   };

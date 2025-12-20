@@ -39,9 +39,20 @@ const FullScreenLoader = () => (
       flex: 1,
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: '#fff',
+      backgroundColor: '#ffffff',
     }}
   >
+    <Text
+      style={{
+        fontSize: 48,
+        fontWeight: 'bold',
+        color: '#ad171c',
+        marginBottom: 20,
+        letterSpacing: 2,
+      }}
+    >
+      PTIT
+    </Text>
     <ActivityIndicator size="large" color="#ad171c" />
   </View>
 );
@@ -88,7 +99,7 @@ const StudentInnerDrawer = () => (
     <Drawer.Screen
       name="StudentDashboard"
       component={StudentDashboardScreen}
-      options={{ title: 'Dashboard' }}
+      options={{ title: 'Trang chủ' }}
     />
     <Drawer.Screen
       name="StudentClasses"

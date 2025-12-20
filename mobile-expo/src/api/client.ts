@@ -240,9 +240,20 @@ type ForgotPasswordResponse = {
   expiresAt?: string;
 };
 
+type LoginResponse = {
+  accessToken: string;
+  user: {
+    id: string;
+    role: string;
+    fullName?: string;
+    username?: string;
+    email?: string;
+  };
+};
+
 export const api = {
   login: (payload: { username: string; password: string }) =>
-    apiRequest('/api/auth/login', {
+    apiRequest<LoginResponse>('/api/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     }),

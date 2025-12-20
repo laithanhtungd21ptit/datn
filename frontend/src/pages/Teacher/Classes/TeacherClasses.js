@@ -25,7 +25,6 @@ import {
   MenuItem,
 } from '@mui/material';
 import {
-  Add,
   MoreVert,
   People,
   Assignment,
@@ -68,7 +67,6 @@ const TeacherClasses = () => {
   ]);
 
   const [selectedClass, setSelectedClass] = useState(null);
-  const [openDialog, setOpenDialog] = useState(false);
   const [openStudentsDialog, setOpenStudentsDialog] = useState(false);
   const [openNotificationDialog, setOpenNotificationDialog] = useState(false);
   const [anchorEl, setAnchorEl] = useState(null);
@@ -179,24 +177,6 @@ const TeacherClasses = () => {
     }
   };
 
-  const [createForm, setCreateForm] = useState({ name: '', code: '', description: '' });
-
-  const handleCreateClass = () => {
-    setOpenDialog(true);
-  };
-
-  const handleCreateSubmit = async () => {
-    if (!createForm.name || !createForm.code) return;
-    try {
-      await api.teacherCreateClass(createForm);
-      const list = await api.teacherClasses();
-      setClasses(list.map(c => ({ id: c.id, name: c.name, code: c.code, description: c.department || '', students: c.students ?? 0, assignments: c.assignments ?? 0 })));
-      setOpenDialog(false);
-      setCreateForm({ name: '', code: '', description: '' });
-    } catch (e) {
-      console.error('Error creating class:', e);
-    }
-  };
 
   const handleViewDetail = (classItem) => {
     navigate(`/teacher/classes/${classItem.id}`);
@@ -213,13 +193,6 @@ const TeacherClasses = () => {
         <Typography variant="h4" gutterBottom>
           Quản lý lớp học
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<Add />}
-          onClick={handleCreateClass}
-        >
-          Tạo lớp học mới
-        </Button>
       </Box>
 
       {/* Search Filter */}
@@ -438,52 +411,6 @@ const TeacherClasses = () => {
         classNameLabel={selectedClass?.name || ''}
       />
 
-      {/* Create Class Dialog */}
-      <Dialog
-        open={openDialog}
-        onClose={() => setOpenDialog(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Tạo lớp học mới</DialogTitle>
-        <DialogContent>
-        <TextField
-        autoFocus
-        margin="dense"
-        label="Tên lớp học"
-        fullWidth
-        variant="outlined"
-          value={createForm.name}
-          onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
-        />
-        <TextField
-        margin="dense"
-        label="Mã lớp học"
-          fullWidth
-          variant="outlined"
-        value={createForm.code}
-        onChange={(e) => setCreateForm(prev => ({ ...prev, code: e.target.value }))}
-        />
-        <TextField
-        margin="dense"
-        label="Mô tả"
-          fullWidth
-          multiline
-        rows={3}
-        variant="outlined"
-        value={createForm.description}
-        onChange={(e) => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
-        />
-        </DialogContent>
-        <DialogActions>
-        <Button onClick={() => setOpenDialog(false)}>
-        Hủy
-        </Button>
-        <Button variant="contained" onClick={handleCreateSubmit} disabled={!createForm.name || !createForm.code}>
-        Tạo lớp
-        </Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };

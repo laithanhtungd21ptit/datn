@@ -69,28 +69,28 @@ export const AuthProvider: React.FC<React.PropsWithChildren> = ({
       }
 
       // Normalize role to lowercase to handle "Teacher" vs "teacher"
-      if (userData.role) {
-        userData = {
-          ...userData,
-          role: userData.role.toLowerCase() as 'student' | 'teacher' | 'admin',
-        };
-      }
-
+      const normalizedRole = userData.role?.toLowerCase() as 'student' | 'teacher' | 'admin';
+      
       // Validate role
-      if (!['student', 'teacher', 'admin'].includes(userData.role)) {
+      if (!normalizedRole || !['student', 'teacher', 'admin'].includes(normalizedRole)) {
         console.warn('Invalid role received:', userData.role);
         throw new Error(`Vai trò không hợp lệ: ${userData.role}`);
       }
 
+      const normalizedUser: User = {
+        ...userData,
+        role: normalizedRole,
+      };
+
       setToken(accessToken);
-      setUser(userData);
+      setUser(normalizedUser);
       await AsyncStorage.multiSet([
         ['accessToken', accessToken],
-        ['currentUser', JSON.stringify(userData)],
+        ['currentUser', JSON.stringify(normalizedUser)],
       ]);
       await setAuthToken(accessToken);
 
-      return userData;
+      return normalizedUser;
     } catch (error) {
       console.error('Login error:', error);
       throw error;

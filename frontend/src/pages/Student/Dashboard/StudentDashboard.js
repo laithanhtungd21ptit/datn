@@ -367,7 +367,7 @@ const StudentDashboard = () => {
         gutterBottom
         sx={{ fontSize: { xs: '1.75rem', sm: '2.125rem' } }}
       >
-        Dashboard Sinh viên
+        Trang chủ Sinh viên
       </Typography>
       <Typography 
         variant="subtitle1" 

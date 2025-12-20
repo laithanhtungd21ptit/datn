@@ -49,7 +49,9 @@ const TeacherAssignmentsScreen: React.FC = () => {
   const [classes, setClasses] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(false);
   const [classFilter, setClassFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'ongoing' | 'expired'>('ongoing');
   const [showClassFilterModal, setShowClassFilterModal] = useState(false);
+  const [showStatusFilterModal, setShowStatusFilterModal] = useState(false);
   const [showAssignmentModal, setShowAssignmentModal] = useState(false);
   const [showGradingModal, setShowGradingModal] = useState(false);
   const [showAssignmentClassPicker, setShowAssignmentClassPicker] = useState(false);
@@ -136,10 +138,45 @@ const TeacherAssignmentsScreen: React.FC = () => {
     }
   };
 
+  // Kiểm tra assignment có đang diễn ra hay hết hạn
+  const isAssignmentOngoing = (assignment: Assignment): boolean => {
+    if (!assignment) return false;
+    const now = new Date();
+    
+    // Đối với bài thi, kiểm tra endTime hoặc startAt + duration
+    if (assignment.isExam) {
+      if (assignment.dueDate) {
+        return new Date(assignment.dueDate) >= now;
+      }
+      if (assignment.startAt && assignment.durationMinutes) {
+        const endTime = new Date(assignment.startAt);
+        endTime.setMinutes(endTime.getMinutes() + assignment.durationMinutes);
+        return endTime >= now;
+      }
+    }
+    
+    // Đối với bài tập thường, kiểm tra deadline/dueDate
+    const deadline = assignment.dueDate;
+    if (deadline) {
+      return new Date(deadline) >= now;
+    }
+    
+    return true; // Mặc định là đang diễn ra nếu không có thông tin
+  };
+
+  // Filter function để lọc theo trạng thái
+  const filterByStatus = (assignment: Assignment): boolean => {
+    const isOngoing = isAssignmentOngoing(assignment);
+    return statusFilter === 'ongoing' ? isOngoing : !isOngoing;
+  };
+
   const filteredAssignments = useMemo(() => {
-    if (classFilter === 'all') return assignments;
-    return assignments.filter(a => a.classId === classFilter);
-  }, [assignments, classFilter]);
+    return assignments.filter(a => {
+      const matchesClass = classFilter === 'all' || a.classId === classFilter;
+      const matchesStatus = filterByStatus(a);
+      return matchesClass && matchesStatus;
+    });
+  }, [assignments, classFilter, statusFilter]);
 
   const handleOpenCreateModal = () => {
     setEditingAssignment(null);
@@ -289,6 +326,18 @@ const TeacherAssignmentsScreen: React.FC = () => {
                 {classFilter === 'all'
                   ? 'Tất cả lớp'
                   : classes.find(c => c.id === classFilter)?.name || 'Chọn lớp'}
+              </Text>
+              <Text style={styles.filterDropdownIcon}>▼</Text>
+            </TouchableOpacity>
+          </View>
+          <View style={styles.filterContainer}>
+            <Text style={styles.filterLabel}>Trạng thái:</Text>
+            <TouchableOpacity
+              style={styles.filterDropdown}
+              onPress={() => setShowStatusFilterModal(true)}
+            >
+              <Text style={styles.filterDropdownText}>
+                {statusFilter === 'ongoing' ? 'Đang diễn ra' : 'Hết hạn'}
               </Text>
               <Text style={styles.filterDropdownIcon}>▼</Text>
             </TouchableOpacity>
@@ -839,6 +888,70 @@ const TeacherAssignmentsScreen: React.FC = () => {
                   )}
                 </TouchableOpacity>
               ))}
+            </ScrollView>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Status Filter Dropdown Modal */}
+      <Modal
+        visible={showStatusFilterModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowStatusFilterModal(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowStatusFilterModal(false)}
+        >
+          <View style={styles.dropdownModalContent}>
+            <Text style={styles.dropdownModalTitle}>Chọn trạng thái</Text>
+            <ScrollView>
+              <TouchableOpacity
+                style={[
+                  styles.dropdownItem,
+                  statusFilter === 'ongoing' && styles.dropdownItemActive,
+                ]}
+                onPress={() => {
+                  setStatusFilter('ongoing');
+                  setShowStatusFilterModal(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.dropdownItemText,
+                    statusFilter === 'ongoing' && styles.dropdownItemTextActive,
+                  ]}
+                >
+                  Đang diễn ra
+                </Text>
+                {statusFilter === 'ongoing' && (
+                  <Text style={styles.dropdownItemCheck}>✓</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.dropdownItem,
+                  statusFilter === 'expired' && styles.dropdownItemActive,
+                ]}
+                onPress={() => {
+                  setStatusFilter('expired');
+                  setShowStatusFilterModal(false);
+                }}
+              >
+                <Text
+                  style={[
+                    styles.dropdownItemText,
+                    statusFilter === 'expired' && styles.dropdownItemTextActive,
+                  ]}
+                >
+                  Hết hạn
+                </Text>
+                {statusFilter === 'expired' && (
+                  <Text style={styles.dropdownItemCheck}>✓</Text>
+                )}
+              </TouchableOpacity>
             </ScrollView>
           </View>
         </TouchableOpacity>
