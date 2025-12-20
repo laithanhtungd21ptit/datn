@@ -1,0 +1,1081 @@
+import React, { useState, useEffect, useRef } from 'react';
+import { io } from 'socket.io-client';
+import EmojiPicker from 'emoji-picker-react';
+import { useAuth } from '../../auth/AuthContext';
+import { api } from '../../api/client';
+import {
+  Box,
+  Button,
+  TextField,
+  Typography,
+  Avatar,
+  List,
+  ListItem,
+  ListItemAvatar,
+  ListItemText,
+  Paper,
+  Divider,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Fab,
+  Badge,
+  Chip,
+  CircularProgress,
+  Menu,
+  MenuItem,
+  InputAdornment,
+  ListItemButton,
+  Collapse,
+  Tooltip,
+  Fade,
+} from '@mui/material';
+import {
+  Chat as ChatIcon,
+  Send as SendIcon,
+  Close as CloseIcon,
+  PersonAdd as PersonAddIcon,
+  GroupAdd as GroupAddIcon,
+  Class as ClassIcon,
+  Done as DoneIcon,
+  DoneAll as DoneAllIcon,
+  EmojiEmotions as EmojiIcon,
+  Search as SearchIcon,
+  MoreVert as MoreVertIcon,
+  Phone as PhoneIcon,
+  Videocam as VideocamIcon,
+  Info as InfoIcon,
+  AttachFile as AttachFileIcon,
+  Photo as PhotoIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+  School,
+} from '@mui/icons-material';
+import { styled, keyframes, alpha } from '@mui/material/styles';
+
+// Typing animation
+const typingAnimation = keyframes`
+  0%, 60%, 100% {
+    transform: translateY(0);
+  }
+  30% {
+    transform: translateY(-10px);
+  }
+`;
+
+// Message status component
+const MessageStatus = ({ status, isOwn }) => {
+  if (!isOwn) return null;
+
+  const getStatusIcon = () => {
+    switch (status) {
+      case 'sending':
+        return <CircularProgress size={12} />;
+      case 'sent':
+        return <DoneIcon sx={{ fontSize: 14, opacity: 0.7 }} />;
+      case 'delivered':
+        return <DoneAllIcon sx={{ fontSize: 14, opacity: 0.7 }} />;
+      case 'read':
+        return <DoneAllIcon sx={{ fontSize: 14, opacity: 0.7, color: 'primary.main' }} />;
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', ml: 0.5 }}>
+      {getStatusIcon()}
+    </Box>
+  );
+};
+
+// Styled components
+const ChatFab = styled(Fab)(({ theme }) => ({
+  position: 'fixed',
+  bottom: 20,
+  right: 20,
+  zIndex: 1000,
+  backgroundColor: '#0084FF',
+  color: 'white',
+  '&:hover': {
+    backgroundColor: '#0056CC',
+  },
+}));
+
+const ChatWindow = styled(Paper)(({ theme }) => ({
+  position: 'fixed',
+  bottom: 80,
+  right: 20,
+  width: 380,
+  height: 600,
+  zIndex: 1000,
+  display: 'flex',
+  flexDirection: 'column',
+  boxShadow: '0 12px 28px 0 rgba(0, 0, 0, 0.2), 0 2px 4px 0 rgba(0, 0, 0, 0.1)',
+  borderRadius: theme.spacing(1),
+  overflow: 'hidden',
+}));
+
+const ChatHeader = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(1.5, 2),
+  backgroundColor: '#0084FF',
+  color: 'white',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+}));
+
+const MessagesContainer = styled(Box)(({ theme }) => ({
+  flex: 1,
+  overflowY: 'auto',
+  padding: theme.spacing(2),
+  display: 'flex',
+  flexDirection: 'column',
+  gap: theme.spacing(0.5),
+  backgroundColor: '#f0f2f5',
+}));
+
+const MessageBubble = styled(Box)(({ theme, isOwn }) => ({
+  maxWidth: '75%',
+  alignSelf: isOwn ? 'flex-end' : 'flex-start',
+  marginBottom: theme.spacing(0.5),
+  position: 'relative',
+}));
+
+const MessageContent = styled(Box)(({ theme, isOwn }) => ({
+  padding: theme.spacing(0.75, 1.25),
+  borderRadius: theme.spacing(1.5),
+  backgroundColor: isOwn ? '#0084FF' : 'white',
+  color: isOwn ? 'white' : theme.palette.text.primary,
+  wordWrap: 'break-word',
+  boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
+  border: isOwn ? 'none' : '1px solid #e4e6ea',
+}));
+
+const MessageTime = styled(Typography)(({ theme }) => ({
+  fontSize: '0.7rem',
+  color: 'rgba(255, 255, 255, 0.7)',
+  marginTop: theme.spacing(0.25),
+  textAlign: 'right',
+}));
+
+const ContactItem = styled(ListItemButton)(({ theme, isActive }) => ({
+  borderRadius: theme.spacing(0.5),
+  margin: theme.spacing(0.25, 0.5),
+  backgroundColor: isActive ? alpha(theme.palette.primary.main, 0.1) : 'transparent',
+  '&:hover': {
+    backgroundColor: isActive ? alpha(theme.palette.primary.main, 0.15) : alpha(theme.palette.grey[500], 0.1),
+  },
+}));
+
+const Sidebar = styled(Box)(({ theme }) => ({
+  width: 380,
+  borderRight: `1px solid ${theme.palette.divider}`,
+  backgroundColor: 'white',
+  display: 'flex',
+  flexDirection: 'column',
+}));
+
+const SidebarHeader = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(1.5, 2),
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  backgroundColor: '#f8f9fa',
+}));
+
+const SearchBox = styled(TextField)(({ theme }) => ({
+  '& .MuiOutlinedInput-root': {
+    borderRadius: theme.spacing(2.5),
+    backgroundColor: 'white',
+  },
+}));
+
+const ChatPopup = () => {
+  const { currentUser } = useAuth();
+  const [isOpen, setIsOpen] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [conversations, setConversations] = useState([]);
+  const [currentConversation, setCurrentConversation] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [socket, setSocket] = useState(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [contactsExpanded, setContactsExpanded] = useState({
+    classmates: true,
+    teachers: true,
+    admins: false,
+  });
+
+  // New conversation dialog
+  const [newConvDialogOpen, setNewConvDialogOpen] = useState(false);
+  const [recipients, setRecipients] = useState([]);
+  const [selectedRecipients, setSelectedRecipients] = useState([]);
+  const [newConvType, setNewConvType] = useState('direct');
+  const [typingUsers, setTypingUsers] = useState(new Map());
+  const [isTyping, setIsTyping] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const typingTimeoutRef = useRef(null);
+
+  const messagesEndRef = useRef(null);
+  const [menuAnchorEl, setMenuAnchorEl] = useState(null);
+
+  // Initialize socket connection
+  useEffect(() => {
+    if (currentUser && !socket) {
+      const newSocket = io(process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000', {
+        auth: {
+          token: localStorage.getItem('accessToken')
+        }
+      });
+
+      newSocket.on('connect', () => {
+        console.log('Connected to chat server');
+        newSocket.emit('join', currentUser.id);
+      });
+
+      newSocket.on('new_message', (data) => {
+        const { conversationId, message } = data;
+        if (currentConversation && currentConversation.id === conversationId) {
+          setMessages(prev => [...prev, message]);
+        }
+        // Update conversations list
+        loadConversations();
+        setUnreadCount(prev => prev + 1);
+      });
+
+      // Typing indicators
+      newSocket.on('user_typing', (data) => {
+        if (currentConversation && currentConversation.id === data.conversationId) {
+          setTypingUsers(prev => new Map(prev.set(data.userId, data.username)));
+        }
+      });
+
+      newSocket.on('user_stopped_typing', (data) => {
+        if (currentConversation && currentConversation.id === data.conversationId) {
+          setTypingUsers(prev => {
+            const newMap = new Map(prev);
+            newMap.delete(data.userId);
+            return newMap;
+          });
+        }
+      });
+
+      setSocket(newSocket);
+    }
+
+    return () => {
+      if (socket) {
+        socket.disconnect();
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+    };
+  }, [currentUser]);
+
+  // Load conversations and contacts
+  const loadConversations = async () => {
+    try {
+      const convs = await api.chatConversations();
+      setConversations(convs);
+      // Calculate unread count
+      const unread = convs.reduce((count, conv) => {
+        // This is a simplified calculation - in reality you'd check message read status
+        return count;
+      }, 0);
+      setUnreadCount(unread);
+    } catch (error) {
+      console.error('Failed to load conversations:', error);
+    }
+  };
+
+  // Load contacts
+  const loadContacts = async () => {
+    try {
+      const contacts = await api.studentChatContacts();
+      setRecipients(contacts);
+    } catch (error) {
+      console.error('Error loading contacts:', error);
+    }
+  };
+
+  // Load messages for current conversation
+  const loadMessages = async (conversationId) => {
+    try {
+      setLoading(true);
+      const msgs = await api.chatMessages(conversationId);
+      setMessages(msgs);
+
+      // Join conversation room
+      if (socket) {
+        socket.emit('join_conversation', conversationId);
+      }
+    } catch (error) {
+      console.error('Failed to load messages:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Send message
+  const sendMessage = async () => {
+    if (!newMessage.trim() || !currentConversation) return;
+
+    try {
+      const messageData = {
+        conversationId: currentConversation.id,
+        content: newMessage.trim(),
+      };
+
+      const result = await api.chatSendMessage(messageData);
+      setMessages(prev => [...prev, result.message]);
+      setNewMessage('');
+
+      // Stop typing indicator
+      if (isTyping) {
+        setIsTyping(false);
+        socket?.emit('typing_stop', currentConversation.id);
+      }
+
+      // Emit via socket for real-time updates
+      if (socket) {
+        socket.emit('message_sent', {
+          conversationId: currentConversation.id,
+          message: result.message
+        });
+      }
+    } catch (error) {
+      console.error('Failed to send message:', error);
+    }
+  };
+
+  // Load recipients for new conversation
+  const loadRecipients = async () => {
+    try {
+      const recips = await api.chatRecipients();
+      setRecipients(recips.recipients);
+    } catch (error) {
+      console.error('Failed to load recipients:', error);
+    }
+  };
+
+  // Create new conversation
+  const createConversation = async () => {
+    try {
+      const payload = {
+        type: newConvType,
+        participantIds: selectedRecipients.map(r => r._id),
+      };
+
+      const result = await api.chatCreateConversation(payload);
+
+      // Format the conversation to match the structure from getConversations
+      const formattedConversation = {
+        id: result.conversation._id,
+        type: result.conversation.type,
+        name: result.conversation.name,
+        avatar: result.conversation.type === 'class' ? 'C' : 'G',
+        lastMessage: result.conversation.lastMessage,
+        updatedAt: result.conversation.updatedAt,
+        participants: result.conversation.participants
+      };
+
+      setConversations(prev => [formattedConversation, ...prev]);
+      setCurrentConversation(formattedConversation);
+      setNewConvDialogOpen(false);
+      setSelectedRecipients([]);
+      loadMessages(formattedConversation.id);
+    } catch (error) {
+      console.error('Failed to create conversation:', error);
+    }
+  };
+
+  // Handle conversation selection
+  const handleConversationSelect = async (conversation) => {
+    setCurrentConversation(conversation);
+    await loadMessages(conversation.id);
+
+    // Mark messages as read
+    try {
+      await api.chatMarkAsRead(conversation.id);
+      // Update local unread count
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Failed to mark messages as read:', error);
+    }
+  };
+
+  // Handle key press in message input
+  const handleKeyPress = (event) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+      return;
+    }
+
+    // Handle typing indicator
+    if (currentConversation && !isTyping) {
+      setIsTyping(true);
+      socket?.emit('typing_start', currentConversation.id);
+    }
+
+    // Reset typing timeout
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      if (isTyping) {
+        setIsTyping(false);
+        socket?.emit('typing_stop', currentConversation.id);
+      }
+    }, 1000);
+  };
+
+  // Handle input change
+  const handleInputChange = (event) => {
+    setNewMessage(event.target.value);
+  };
+
+  // Handle emoji selection
+  const onEmojiClick = (emojiObject) => {
+    setNewMessage(prev => prev + emojiObject.emoji);
+    setShowEmojiPicker(false);
+  };
+
+  // Scroll to bottom when new messages arrive
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  // Load conversations and contacts on mount
+  useEffect(() => {
+    if (currentUser) {
+      loadConversations();
+      loadContacts();
+    }
+  }, [currentUser]);
+
+  if (!currentUser) return null;
+
+  const filteredContacts = recipients ? {
+  classmates: recipients.classmates?.filter(c =>
+  c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  c.username.toLowerCase().includes(searchQuery.toLowerCase())
+  ) || [],
+  teachers: recipients.teachers?.filter(c =>
+  c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  c.username.toLowerCase().includes(searchQuery.toLowerCase())
+  ) || [],
+  admins: recipients.admins?.filter(c =>
+  c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+  c.username.toLowerCase().includes(searchQuery.toLowerCase())
+    ) || [],
+  } : { classmates: [], teachers: [], admins: [] };
+
+  return (
+  <>
+  {/* Chat FAB */}
+  <ChatFab
+  onClick={() => setIsOpen(!isOpen)}
+  aria-label="chat"
+  >
+  <Badge badgeContent={unreadCount} color="error">
+  <ChatIcon />
+  </Badge>
+  </ChatFab>
+
+  {/* Chat Window */}
+  <Fade in={isOpen}>
+  <ChatWindow>
+  <Box sx={{ display: 'flex', height: '100%' }}>
+  {/* Sidebar */}
+  {showSidebar && (
+  <Sidebar>
+  <SidebarHeader>
+      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+          <Typography variant="h6" sx={{ color: '#0084FF' }}>
+              Chat
+                    </Typography>
+                    <IconButton size="small" onClick={() => setIsOpen(false)}>
+                      <CloseIcon />
+                    </IconButton>
+                  </Box>
+
+                  <SearchBox
+                    fullWidth
+                    size="small"
+                    placeholder="Tìm kiếm..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <SearchIcon sx={{ color: 'text.secondary' }} />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </SidebarHeader>
+
+                <Box sx={{ flex: 1, overflowY: 'auto' }}>
+                  {/* Recent Conversations */}
+                  <Box sx={{ p: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', px: 1, py: 0.5, color: 'text.secondary' }}>
+                      TIN NHẮN GẦN ĐÂY
+                    </Typography>
+                    <List>
+                      {conversations.slice(0, 5).map((conv) => (
+                        <ContactItem
+                          key={conv.id}
+                          isActive={currentConversation?.id === conv.id}
+                          onClick={() => {
+                            setCurrentConversation(conv);
+                            setShowSidebar(false);
+                            loadMessages(conv.id);
+                          }}
+                        >
+                          <ListItemAvatar>
+                            <Avatar sx={{ bgcolor: '#0084FF' }}>
+                              {conv.name?.charAt(0)?.toUpperCase() || '?'}
+                            </Avatar>
+                          </ListItemAvatar>
+                          <ListItemText
+                            primary={conv.name}
+                            secondary={conv.lastMessage?.content || 'Chưa có tin nhắn'}
+                            primaryTypographyProps={{
+                              variant: 'body2',
+                              sx: { fontWeight: 600 }
+                            }}
+                            secondaryTypographyProps={{
+                              variant: 'caption',
+                              sx: { color: 'text.secondary' }
+                            }}
+                          />
+                        </ContactItem>
+                      ))}
+                    </List>
+                  </Box>
+
+                  {/* Contacts */}
+                  <Box sx={{ p: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', px: 1, py: 0.5, color: 'text.secondary' }}>
+                      DANH BẠ
+                    </Typography>
+
+                    {/* Classmates */}
+                    <Box>
+                      <Button
+                        fullWidth
+                        onClick={() => setContactsExpanded(prev => ({ ...prev, classmates: !prev.classmates }))}
+                        sx={{
+                          justifyContent: 'space-between',
+                          textTransform: 'none',
+                          py: 1,
+                          color: 'text.primary'
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          Bạn học ({filteredContacts.classmates.length})
+                        </Typography>
+                        {contactsExpanded.classmates ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                      </Button>
+                      <Collapse in={contactsExpanded.classmates}>
+                        <List>
+                          {filteredContacts.classmates.map((contact) => (
+                            <ContactItem
+                              key={contact.id}
+                              onClick={() => {
+                                // Start new conversation or select existing one
+                                setCurrentConversation({
+                                  id: contact.id,
+                                  name: contact.name,
+                                  type: 'direct',
+                                  participants: [contact]
+                                });
+                                setShowSidebar(false);
+                                loadMessages(contact.id);
+                              }}
+                            >
+                              <ListItemAvatar>
+                                <Avatar sx={{ bgcolor: '#0084FF' }}>
+                                  {contact.name.charAt(0).toUpperCase()}
+                                </Avatar>
+                              </ListItemAvatar>
+                              <ListItemText
+                                primary={contact.name}
+                                secondary={contact.studentId}
+                                primaryTypographyProps={{
+                                  variant: 'body2',
+                                  sx: { fontWeight: 500 }
+                                }}
+                                secondaryTypographyProps={{
+                                  variant: 'caption',
+                                  sx: { color: 'text.secondary' }
+                                }}
+                              />
+                            </ContactItem>
+                          ))}
+                        </List>
+                      </Collapse>
+                    </Box>
+
+                    {/* Teachers */}
+                    <Box>
+                      <Button
+                        fullWidth
+                        onClick={() => setContactsExpanded(prev => ({ ...prev, teachers: !prev.teachers }))}
+                        sx={{
+                          justifyContent: 'space-between',
+                          textTransform: 'none',
+                          py: 1,
+                          color: 'text.primary'
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          Giảng viên ({filteredContacts.teachers.length})
+                        </Typography>
+                        {contactsExpanded.teachers ? <ExpandLessIcon /> : <ExpandMoreIcon />}
+                      </Button>
+                      <Collapse in={contactsExpanded.teachers}>
+                        <List>
+                          {filteredContacts.teachers.map((contact) => (
+                            <ContactItem
+                              key={contact.id}
+                              onClick={() => {
+                                setCurrentConversation({
+                                  id: contact.id,
+                                  name: contact.name,
+                                  type: 'direct',
+                                  participants: [contact]
+                                });
+                                setShowSidebar(false);
+                                loadMessages(contact.id);
+                              }}
+                            >
+                              <ListItemAvatar>
+                                <Avatar sx={{ bgcolor: '#e3f2fd' }}>
+                                  <School sx={{ color: '#0084FF' }} />
+                                </Avatar>
+                              </ListItemAvatar>
+                              <ListItemText
+                                primary={contact.name}
+                                secondary={contact.teacherId}
+                                primaryTypographyProps={{
+                                  variant: 'body2',
+                                  sx: { fontWeight: 500 }
+                                }}
+                                secondaryTypographyProps={{
+                                  variant: 'caption',
+                                  sx: { color: 'text.secondary' }
+                                }}
+                              />
+                            </ContactItem>
+                          ))}
+                        </List>
+                      </Collapse>
+                    </Box>
+                  </Box>
+                </Box>
+              </Sidebar>
+            )}
+
+            {/* Chat Area */}
+            <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
+              {currentConversation ? (
+                <>
+                  {/* Chat Header */}
+                  <ChatHeader>
+                    <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                      {showSidebar && (
+                        <IconButton
+                          size="small"
+                          onClick={() => setShowSidebar(false)}
+                          sx={{ mr: 1, color: 'white' }}
+                        >
+                          <CloseIcon />
+                        </IconButton>
+                      )}
+                      {!showSidebar && (
+                        <IconButton
+                          size="small"
+                          onClick={() => setShowSidebar(true)}
+                          sx={{ mr: 1, color: 'white' }}
+                        >
+                          <PersonAddIcon />
+                        </IconButton>
+                      )}
+                      <Avatar sx={{ mr: 2, bgcolor: 'rgba(255,255,255,0.2)' }}>
+                        {currentConversation.name?.charAt(0)?.toUpperCase() || '?'}
+                      </Avatar>
+                      <Box>
+                        <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                          {currentConversation.name}
+                        </Typography>
+                        <Typography variant="caption" sx={{ opacity: 0.8 }}>
+                          {currentConversation.type === 'direct' ? 'Trực tiếp' : 'Nhóm'}
+                        </Typography>
+                      </Box>
+                    </Box>
+
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <Tooltip title="Cuộc gọi">
+                        <IconButton size="small" sx={{ color: 'white' }}>
+                          <PhoneIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Cuộc gọi video">
+                        <IconButton size="small" sx={{ color: 'white' }}>
+                          <VideocamIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Thông tin">
+                        <IconButton size="small" sx={{ color: 'white' }}>
+                          <InfoIcon />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  </ChatHeader>
+
+          {/* Messages Area */}
+          <MessagesContainer>
+          {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+                        <CircularProgress />
+                      </Box>
+                    ) : (
+                      <>
+                        {messages.map((msg, index) => {
+                          const isOwn = msg.senderId === currentUser.id || msg.senderId?._id === currentUser.id;
+                          const showTimestamp = index === 0 || 
+                            new Date(messages[index - 1].createdAt).toDateString() !== new Date(msg.createdAt).toDateString();
+
+                          return (
+                            <React.Fragment key={msg._id || index}>
+                              {showTimestamp && (
+                                <Box sx={{ textAlign: 'center', my: 2 }}>
+                                  <Chip
+                                    label={new Date(msg.createdAt).toLocaleDateString('vi-VN')}
+                                    size="small"
+                                    sx={{ bgcolor: '#e4e6ea', color: 'text.secondary' }}
+                                  />
+                                </Box>
+                              )}
+                              <MessageBubble isOwn={isOwn}>
+                                <MessageContent isOwn={isOwn}>
+                                  <Typography variant="body2" sx={{ wordBreak: 'break-word' }}>
+                                    {msg.content}
+                                  </Typography>
+                                </MessageContent>
+                                {isOwn && (
+                                  <MessageTime>
+                                    {new Date(msg.createdAt).toLocaleTimeString('vi-VN', { 
+                                      hour: '2-digit', 
+                                      minute: '2-digit' 
+                                    })}
+                                  </MessageTime>
+                                )}
+                              </MessageBubble>
+                            </React.Fragment>
+                          );
+                        })}
+                        <div ref={messagesEndRef} />
+                      </>
+                    )}
+                  </MessagesContainer>
+
+                  {/* Message Input */}
+                  <Box sx={{ p: 2, borderTop: '1px solid #e4e6ea', bgcolor: 'white' }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <IconButton size="small" sx={{ color: '#65676b' }}>
+                        <AttachFileIcon />
+                      </IconButton>
+                      <IconButton size="small" sx={{ color: '#65676b' }}>
+                        <PhotoIcon />
+                      </IconButton>
+                      <TextField
+                        fullWidth
+                        placeholder="Aa"
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyPress={(e) => {
+                          if (e.key === 'Enter' && !e.shiftKey) {
+                            e.preventDefault();
+                            handleSendMessage();
+                          }
+                        }}
+                        multiline
+                        maxRows={3}
+                        sx={{
+                          '& .MuiOutlinedInput-root': {
+                            borderRadius: '20px',
+                            bgcolor: '#f0f2f5',
+                            '& fieldset': {
+                              border: 'none',
+                            },
+                          },
+                        }}
+                        InputProps={{
+                          endAdornment: (
+                            <InputAdornment position="end">
+                              <IconButton
+                                size="small"
+                                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                                sx={{ color: '#65676b' }}
+                              >
+                                <EmojiIcon />
+                              </IconButton>
+                            </InputAdornment>
+                          ),
+                        }}
+                      />
+                      <IconButton
+                        onClick={handleSendMessage}
+                        disabled={!newMessage.trim()}
+                        sx={{
+                          bgcolor: '#0084FF',
+                          color: 'white',
+                          '&:hover': {
+                            bgcolor: '#0056CC',
+                          },
+                          '&:disabled': {
+                            bgcolor: '#e4e6ea',
+                            color: '#bcc0c4',
+                          },
+                        }}
+                      >
+                        <SendIcon />
+                      </IconButton>
+                    </Box>
+
+                    {/* Emoji Picker */}
+                    {showEmojiPicker && (
+                      <Box sx={{ position: 'absolute', bottom: '60px', right: '20px' }}>
+                        <EmojiPicker onEmojiClick={(emojiData) => {
+                          setNewMessage(prev => prev + emojiData.emoji);
+                          setShowEmojiPicker(false);
+                        }} />
+                      </Box>
+                    )}
+                  </Box>
+                </>
+              ) : (
+                // Empty State
+                <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'text.secondary' }}>
+                  <ChatIcon sx={{ fontSize: 64, mb: 2, opacity: 0.5 }} />
+                  <Typography variant="h6" gutterBottom>
+                    Chào mừng đến với Chat
+                  </Typography>
+                  <Typography variant="body2" textAlign="center" sx={{ mb: 3 }}>
+                    Chọn một cuộc trò chuyện hoặc bắt đầu cuộc trò chuyện mới
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<PersonAddIcon />}
+                    onClick={() => setShowSidebar(true)}
+                    sx={{ bgcolor: '#0084FF', '&:hover': { bgcolor: '#0056CC' } }}
+                  >
+                    Bắt đầu trò chuyện
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          </Box>
+        </ChatWindow>
+      </Fade>
+    </>
+  );
+};
+
+export default ChatPopup;
+
+                {/* Messages */}
+                <MessagesContainer>
+                  {loading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+                      <CircularProgress size={24} />
+                    </Box>
+                  ) : (
+                    <>
+                      {messages.map((msg) => (
+                        <MessageBubble
+                          key={msg._id}
+                          isOwn={msg.senderId._id === currentUser.id}
+                        >
+                          <Typography variant="body2">
+                            {msg.content}
+                          </Typography>
+                          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mt: 0.5 }}>
+                            <Typography variant="caption" sx={{ opacity: 0.7 }}>
+                              {new Date(msg.createdAt).toLocaleTimeString()}
+                            </Typography>
+                            <MessageStatus
+                              status={msg.status}
+                              isOwn={msg.senderId._id === currentUser.id}
+                            />
+                          </Box>
+                        </MessageBubble>
+                      ))}
+
+                      {/* Typing indicator */}
+                      {typingUsers.size > 0 && (
+                        <Box sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          ml: 2,
+                          mt: 1,
+                          opacity: 0.7
+                        }}>
+                          <Box sx={{
+                            display: 'flex',
+                            gap: 1,
+                            mr: 1
+                          }}>
+                            <Box sx={{
+                            width: 4,
+                            height: 4,
+                            borderRadius: '50%',
+                            backgroundColor: 'primary.main',
+                            animation: `${typingAnimation} 1.4s infinite`
+                            }} />
+                            <Box sx={{
+                            width: 4,
+                            height: 4,
+                            borderRadius: '50%',
+                            backgroundColor: 'primary.main',
+                            animation: `${typingAnimation} 1.4s infinite 0.2s`
+                            }} />
+                            <Box sx={{
+                            width: 4,
+                            height: 4,
+                            borderRadius: '50%',
+                            backgroundColor: 'primary.main',
+                            animation: `${typingAnimation} 1.4s infinite 0.4s`
+                            }} />
+                          </Box>
+                          <Typography variant="caption" sx={{ fontStyle: 'italic' }}>
+                            {Array.from(typingUsers.values()).join(', ')} đang nhập...
+                          </Typography>
+                        </Box>
+                      )}
+                    </>
+                  )}
+                  <div ref={messagesEndRef} />
+                </MessagesContainer>
+
+                {/* Message Input */}
+                <Box sx={{ p: 1, borderTop: 1, borderColor: 'divider', display: 'flex', gap: 1 }}>
+                  <TextField
+                    fullWidth
+                    size="small"
+                    placeholder="Nhập tin nhắn..."
+                    value={newMessage}
+                    onChange={handleInputChange}
+                    onKeyUp={handleKeyPress}
+                    multiline
+                    maxRows={3}
+                  />
+                  <IconButton
+                    color="primary"
+                    onClick={sendMessage}
+                    disabled={!newMessage.trim()}
+                  >
+                    <SendIcon />
+                  </IconButton>
+                </Box>
+              </>
+            )}
+          </Box>
+        </ChatWindow>
+      )}
+
+      {/* New Conversation Menu */}
+      <Menu
+        anchorEl={menuAnchorEl}
+        open={Boolean(menuAnchorEl)}
+        onClose={() => setMenuAnchorEl(null)}
+      >
+        <MenuItem onClick={() => {
+          setNewConvType('direct');
+          setNewConvDialogOpen(true);
+          loadRecipients();
+          setMenuAnchorEl(null);
+        }}>
+          <PersonAddIcon sx={{ mr: 1 }} />
+          Trò chuyện trực tiếp
+        </MenuItem>
+        <MenuItem onClick={() => {
+          setNewConvType('class');
+          setNewConvDialogOpen(true);
+          loadRecipients();
+          setMenuAnchorEl(null);
+        }}>
+          <ClassIcon sx={{ mr: 1 }} />
+          Tạo nhóm lớp
+        </MenuItem>
+      </Menu>
+
+      {/* New Conversation Dialog */}
+      <Dialog
+        open={newConvDialogOpen}
+        onClose={() => setNewConvDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Tạo cuộc trò chuyện mới
+        </DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" sx={{ mb: 2 }}>
+            Chọn người nhận:
+          </Typography>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+            {selectedRecipients.map((recipient) => (
+              <Chip
+                key={recipient._id}
+                label={recipient.fullName}
+                onDelete={() => setSelectedRecipients(prev => prev.filter(r => r._id !== recipient._id))}
+              />
+            ))}
+          </Box>
+          <List sx={{ maxHeight: 300, overflowY: 'auto' }}>
+            {recipients
+              .filter(recipient => !selectedRecipients.find(sr => sr._id === recipient._id))
+              .map((recipient) => (
+                <ListItem
+                  key={recipient._id}
+                  button
+                  onClick={() => setSelectedRecipients(prev => [...prev, recipient])}
+                >
+                  <ListItemAvatar>
+                    <Avatar>{recipient.fullName.charAt(0)}</Avatar>
+                  </ListItemAvatar>
+                  <ListItemText
+                    primary={recipient.fullName}
+                    secondary={`${recipient.role} - ${recipient.username}`}
+                  />
+                </ListItem>
+              ))}
+          </List>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setNewConvDialogOpen(false)}>
+            Hủy
+          </Button>
+          <Button
+            onClick={createConversation}
+            variant="contained"
+            disabled={selectedRecipients.length === 0}
+          >
+            Tạo
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
+
+export default ChatPopup;

@@ -1,0 +1,30 @@
+# Dependencies
+node_modules
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Development
+*.log
+npm-debug.log*
+
+# Testing
+src/**/*.test.js
+src/**/*.spec.js
+
+# Documentation
+*.md
+!README.md
+
+# IDE
+.vscode
+.idea
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts (will be regenerated)
+build
