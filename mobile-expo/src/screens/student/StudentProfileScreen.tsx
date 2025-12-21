@@ -15,6 +15,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../../api/client';
 import { colors } from '../../theme/colors';
+import { getAvatarUrl } from '../../utils/avatarHelper';
 
 type Profile = {
   fullName: string;
@@ -47,6 +48,7 @@ const StudentProfileScreen: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
   
   // Password change states
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -74,9 +76,10 @@ const StudentProfileScreen: React.FC = () => {
 
   const loadProfile = async () => {
     try {
-      const data = await api.studentProfile();
+      const data = await api.studentProfile() as Profile;
       setProfile(data);
       setForm(data);
+      setAvatarLoadError(false); // Reset avatar error when loading new profile
       if (data.email) {
         setPasswordEmail(data.email);
       }
@@ -89,7 +92,7 @@ const StudentProfileScreen: React.FC = () => {
 
   const loadNotificationSettings = async () => {
     try {
-      const settings = await api.studentGetNotificationSettings();
+      const settings = await api.studentGetNotificationSettings() as NotificationSettings;
       setNotificationSettings({
         emailNotifications: settings.emailNotifications ?? true,
         assignmentDeadlines: settings.assignmentDeadlines ?? true,
@@ -124,9 +127,10 @@ const StudentProfileScreen: React.FC = () => {
         name: asset.fileName ?? `avatar-${Date.now()}.jpg`,
         type: asset.mimeType ?? 'image/jpeg',
       } as any);
-      const response = await api.studentUploadAvatar(formData);
+      const response = await api.studentUploadAvatar(formData) as { avatar: string };
       setForm({ ...form, avatar: response.avatar });
       setProfile(prev => (prev ? { ...prev, avatar: response.avatar } : prev));
+      setAvatarLoadError(false); // Reset error when new avatar is uploaded
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Không thể tải ảnh đại diện');
     }
@@ -143,7 +147,7 @@ const StudentProfileScreen: React.FC = () => {
         address: form.address,
         dateOfBirth: form.dateOfBirth,
         gender: form.gender,
-      });
+      }) as Profile;
       setProfile(updated);
       setForm(updated);
       setEditing(false);
@@ -265,8 +269,15 @@ const StudentProfileScreen: React.FC = () => {
 
       <View style={styles.card}>
         <View style={styles.avatarRow}>
-          {form.avatar ? (
-            <Image source={{ uri: form.avatar }} style={styles.avatar} />
+          {form.avatar && !avatarLoadError ? (
+            <Image 
+              source={{ uri: getAvatarUrl(form.avatar) || '' }} 
+              style={styles.avatar}
+              onError={() => {
+                // If image fails to load, show placeholder but keep avatar URL
+                setAvatarLoadError(true);
+              }}
+            />
           ) : (
             <View style={[styles.avatar, styles.avatarPlaceholder]}>
               <Text style={styles.avatarPlaceholderText}>
