@@ -64,7 +64,6 @@ const StudentProfileScreen: React.FC = () => {
     assignmentDeadlines: true,
     gradeUpdates: true,
     classAnnouncements: true,
-    systemUpdates: true,
   });
   const [notificationLoading, setNotificationLoading] = useState(false);
 
@@ -96,7 +95,6 @@ const StudentProfileScreen: React.FC = () => {
         assignmentDeadlines: settings.assignmentDeadlines ?? true,
         gradeUpdates: settings.gradeUpdates ?? true,
         classAnnouncements: settings.classAnnouncements ?? true,
-        systemUpdates: settings.systemUpdates ?? true,
       });
     } catch (e) {
       console.warn('Không thể tải cài đặt thông báo:', e);
@@ -452,22 +450,6 @@ const StudentProfileScreen: React.FC = () => {
           <Switch
             value={notificationSettings.classAnnouncements ?? true}
             onValueChange={(value) => handleNotificationChange('classAnnouncements', value)}
-            disabled={notificationLoading || !(notificationSettings.emailNotifications ?? true)}
-          />
-        </View>
-        <View style={[
-          styles.notificationItem,
-          !(notificationSettings.emailNotifications ?? true) && styles.disabledItem
-        ]}>
-          <Text style={[
-            styles.notificationLabel,
-            !(notificationSettings.emailNotifications ?? true) && styles.disabledText
-          ]}>
-            Cập nhật hệ thống
-          </Text>
-          <Switch
-            value={notificationSettings.systemUpdates ?? true}
-            onValueChange={(value) => handleNotificationChange('systemUpdates', value)}
             disabled={notificationLoading || !(notificationSettings.emailNotifications ?? true)}
           />
         </View>

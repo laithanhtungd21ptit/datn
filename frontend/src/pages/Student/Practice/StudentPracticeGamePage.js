@@ -4,20 +4,10 @@ import { useAuth } from '../../../auth/AuthContext';
 import { Box, Typography, IconButton, AppBar, Toolbar, Container } from '@mui/material';
 import { ArrowBack } from '@mui/icons-material';
 import ImageProcessingGamePage from './ImageProcessingGamePage';
-import ExposureGamePage from './photography/ExposureGamePage';
 import AudioEQGamePage from './audio/AudioEQGamePage';
 import Graphics3DGamePage from './graphics/Graphics3DGamePage';
 
 const subjectsData = {
-  photography: {
-    name: 'Kỹ thuật nhiếp ảnh',
-    games: {
-      'exposure-game': {
-        title: 'Game điều chỉnh độ phơi sáng',
-        description: 'Học cách điều chỉnh khẩu độ, tốc độ màn trập và ISO để có độ phơi sáng phù hợp',
-      },
-    },
-  },
   multimedia: {
     name: 'Xử lý và truyền thông đa phương tiện',
     games: {
@@ -115,7 +105,6 @@ const StudentPracticeGamePage = () => {
       ) : (
         <Container maxWidth="xl" sx={{ py: 3 }}>
           {subjectId === 'multimedia' && gameId === 'image-processing-game' && <ImageProcessingGamePage />}
-          {subjectId === 'photography' && gameId === 'exposure-game' && <ExposureGamePage />}
           {subjectId === 'audio' && gameId === 'audio-eq-game' && <AudioEQGamePage />}
         </Container>
       )}

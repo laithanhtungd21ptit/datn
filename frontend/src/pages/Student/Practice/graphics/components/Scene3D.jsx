@@ -5,6 +5,10 @@ import { OrbitControls, Text, Line } from '@react-three/drei';
 import * as THREE from 'three';
 import { TransformationType } from '../types';
 
+// Font URL - drei Text supports TTF/OTF/WOFF directly via troika-three-text
+// Pass the font URL directly to Text component's font prop
+const fontUrl = '/fonts/Roboto-Regular.ttf';
+
 // Component to draw connections and surfaces between points for all generations
 const ConnectionLines = ({ objects, numPoints }) => {
   if (objects.length < 2) return null;
@@ -134,7 +138,7 @@ const ConnectionLines = ({ objects, numPoints }) => {
   );
 };
 
-const TransformableObject = ({ data }) => {
+const TransformableObject = ({ data, font }) => {
   const rotationRad = [
     (data.rotation[0] * Math.PI) / 180,
     (data.rotation[1] * Math.PI) / 180,
@@ -198,6 +202,7 @@ const TransformableObject = ({ data }) => {
       {/* Label and Coordinates combined for clarity */}
       <group position={[0, 0.4, 0]}>
         <Text
+          font={font}
           fontSize={0.25}
           color="white"
           anchorX="center"
@@ -210,20 +215,20 @@ const TransformableObject = ({ data }) => {
         
         {/* Color-coded parts for (X, Y, Z) */}
         <group position={[0, -0.3, 0]}>
-          <Text fontSize={0.18} color="white" position={[-0.6, 0, 0]} anchorX="left">(</Text>
-          <Text fontSize={0.18} color={axisColors.x} position={[-0.5, 0, 0]} anchorX="left">{data.position[0].toFixed(1)}</Text>
-          <Text fontSize={0.18} color="white" position={[-0.1, 0, 0]} anchorX="left">,</Text>
-          <Text fontSize={0.18} color={axisColors.y} position={[0.05, 0, 0]} anchorX="left">{data.position[1].toFixed(1)}</Text>
-          <Text fontSize={0.18} color="white" position={[0.45, 0, 0]} anchorX="left">,</Text>
-          <Text fontSize={0.18} color={axisColors.z} position={[0.6, 0, 0]} anchorX="left">{data.position[2].toFixed(1)}</Text>
-          <Text fontSize={0.18} color="white" position={[1.0, 0, 0]} anchorX="left">)</Text>
+          <Text font={font} fontSize={0.18} color="white" position={[-0.6, 0, 0]} anchorX="left">(</Text>
+          <Text font={font} fontSize={0.18} color={axisColors.x} position={[-0.5, 0, 0]} anchorX="left">{data.position[0].toFixed(1)}</Text>
+          <Text font={font} fontSize={0.18} color="white" position={[-0.1, 0, 0]} anchorX="left">,</Text>
+          <Text font={font} fontSize={0.18} color={axisColors.y} position={[0.05, 0, 0]} anchorX="left">{data.position[1].toFixed(1)}</Text>
+          <Text font={font} fontSize={0.18} color="white" position={[0.45, 0, 0]} anchorX="left">,</Text>
+          <Text font={font} fontSize={0.18} color={axisColors.z} position={[0.6, 0, 0]} anchorX="left">{data.position[2].toFixed(1)}</Text>
+          <Text font={font} fontSize={0.18} color="white" position={[1.0, 0, 0]} anchorX="left">)</Text>
         </group>
       </group>
     </group>
   );
 };
 
-const DynamicAxes = ({ objects }) => {
+const DynamicAxes = ({ objects, font }) => {
   const maxCoord = useMemo(() => {
     let max = 15; // Minimum axis length
     objects.forEach(obj => {
@@ -253,37 +258,37 @@ const DynamicAxes = ({ objects }) => {
       {range.map(v => (
         <group key={`x-${v}`} position={[v, 0, 0]}>
           <Line points={[[0, -0.15, 0], [0, 0.15, 0]]} color={colors.x} lineWidth={1} />
-          <Text position={[0, -0.5, 0]} fontSize={0.25} color={colors.x}>{v}</Text>
+          <Text font={font} position={[0, -0.5, 0]} fontSize={0.25} color={colors.x}>{v}</Text>
         </group>
       ))}
-      <Text position={[maxCoord + 1.8, 0, 0]} fontSize={0.6} color={colors.x}>X</Text>
+      <Text font={font} position={[maxCoord + 1.8, 0, 0]} fontSize={0.6} color={colors.x}>X</Text>
       
       {/* Y Axis */}
       <Line points={[[0, -maxCoord - 1, 0], [0, maxCoord + 1, 0]]} color={colors.y} lineWidth={2} />
       {range.map(v => (
         <group key={`y-${v}`} position={[0, v, 0]}>
           <Line points={[[-0.15, 0, 0], [0.15, 0, 0]]} color={colors.y} lineWidth={1} />
-          <Text position={[-0.6, 0, 0]} fontSize={0.25} color={colors.y}>{v}</Text>
+          <Text font={font} position={[-0.6, 0, 0]} fontSize={0.25} color={colors.y}>{v}</Text>
         </group>
       ))}
-      <Text position={[0, maxCoord + 1.8, 0]} fontSize={0.6} color={colors.y}>Y</Text>
+      <Text font={font} position={[0, maxCoord + 1.8, 0]} fontSize={0.6} color={colors.y}>Y</Text>
       
       {/* Z Axis */}
       <Line points={[[0, 0, -maxCoord - 1], [0, 0, maxCoord + 1]]} color={colors.z} lineWidth={2} />
       {range.map(v => (
         <group key={`z-${v}`} position={[0, 0, v]}>
           <Line points={[[-0.15, 0, 0], [0.15, 0, 0]]} color={colors.z} lineWidth={1} />
-          <Text position={[-0.5, 0.3, 0]} fontSize={0.25} color={colors.z} rotation={[0, Math.PI / 4, 0]}>{v}</Text>
+          <Text font={font} position={[-0.5, 0.3, 0]} fontSize={0.25} color={colors.z} rotation={[0, Math.PI / 4, 0]}>{v}</Text>
         </group>
       ))}
-      <Text position={[0, 0, maxCoord + 1.8]} fontSize={0.6} color={colors.z}>Z</Text>
+      <Text font={font} position={[0, 0, maxCoord + 1.8]} fontSize={0.6} color={colors.z}>Z</Text>
 
       {/* Origin */}
       <mesh position={[0, 0, 0]}>
         <sphereGeometry args={[0.15, 16, 16]} />
         <meshBasicMaterial color="white" />
       </mesh>
-      <Text position={[-0.5, -0.5, 0]} fontSize={0.35} color="white">O(0,0,0)</Text>
+      <Text font={font} position={[-0.5, -0.5, 0]} fontSize={0.35} color="white">O(0,0,0)</Text>
     </group>
   );
 };
@@ -308,13 +313,13 @@ const Scene3D = ({ objects, numPoints }) => {
         <pointLight position={[20, 20, 20]} intensity={1.5} />
         <pointLight position={[-20, -20, -20]} intensity={0.5} />
         
-        <DynamicAxes objects={objects} />
+        <DynamicAxes objects={objects} font={fontUrl} />
         
         {/* Draw connections between points */}
         <ConnectionLines objects={objects} numPoints={numPoints} />
         
         {objects.map((obj) => (
-          <TransformableObject key={obj.id} data={obj} />
+          <TransformableObject key={obj.id} data={obj} font={fontUrl} />
         ))}
 
         <OrbitControls makeDefault minDistance={2} maxDistance={100} />

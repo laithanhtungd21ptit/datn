@@ -63,7 +63,6 @@ const defaultNotificationSettings = {
   assignmentDeadlines: true,
   gradeUpdates: true,
   classAnnouncements: true,
-  systemUpdates: true,
 };
 
 const StudentProfile = () => {
@@ -743,17 +742,6 @@ const StudentProfile = () => {
                   sx={{ opacity: notificationSettings.emailNotifications ? 1 : 0.5 }}
                 />
                 
-                <FormControlLabel
-                  control={
-                    <Switch
-                      checked={notificationSettings.systemUpdates}
-                      onChange={(e) => handleNotificationChange('systemUpdates', e.target.checked)}
-                      disabled={notificationSavingKey === 'systemUpdates' || !notificationSettings.emailNotifications}
-                    />
-                  }
-                  label="Cập nhật hệ thống"
-                  sx={{ opacity: notificationSettings.emailNotifications ? 1 : 0.5 }}
-                />
               </Box>
             </CardContent>
           </Card>

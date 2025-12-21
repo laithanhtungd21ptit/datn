@@ -13,11 +13,6 @@ import {
   ToggleButtonGroup,
   Menu,
   MenuItem,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Alert,
 } from '@mui/material';
 import {
@@ -27,8 +22,6 @@ import {
   Equalizer,
   MusicNote,
   GraphicEq,
-  SettingsBackupRestore,
-  Save,
   Info,
 } from '@mui/icons-material';
 
@@ -80,33 +73,6 @@ const presets = [
   },
 ];
 
-const learningMissions = [
-  {
-    title: 'Lesson 1 - Clean Vocal',
-    steps: [
-      'Tải một audio giọng nói.',
-      'Tăng High-pass tới ~120 Hz để loại bỏ tiếng ồn trầm.',
-      'Giảm Low-pass xuống ~12 kHz để giảm tiếng xì.',
-      'Tăng Presence để giọng nói rõ hơn.',
-    ],
-  },
-  {
-    title: 'Lesson 2 - Punchy Beat',
-    steps: [
-      'Tăng Bass +5 dB để nhạc trống mạnh hơn.',
-      'Thêm Treble +3 dB để hi-hat rõ và sáng.',
-      'Pan stereo ±0.2 để mở rộng không gian.',
-    ],
-  },
-  {
-    title: 'Lesson 3 - Ambient Space',
-    steps: [
-      'Giữ High-pass thấp để giữ độ ấm.',
-      'Set Reverb mix ~0.3 để tạo cảm giác phòng.',
-      'Quan sát phổ khi bật/tắt reverb.',
-    ],
-  },
-];
 
 const sampleTones = [
   { label: 'Tone 440Hz', frequency: 440 },
@@ -181,8 +147,6 @@ export default function AudioEQGamePage() {
   const [tab, setTab] = useState(0);
   const [visualMode, setVisualMode] = useState('spectrum');
   const [presetAnchor, setPresetAnchor] = useState(null);
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [settingsJson, setSettingsJson] = useState('');
   const [activePreset, setActivePreset] = useState('');
 
   const [lowpass, setLowpass] = useState(18000);
@@ -424,39 +388,6 @@ export default function AudioEQGamePage() {
     setPresetAnchor(null);
   };
 
-  const exportSettings = () => {
-    const data = {
-      highpass,
-      lowpass,
-      gain,
-      bassGain,
-      presenceGain,
-      presenceFreq,
-      trebleGain,
-      stereoPan,
-      reverbMix,
-    };
-    setSettingsJson(JSON.stringify(data, null, 2));
-    setExportDialogOpen(true);
-  };
-
-  const importSettings = () => {
-    try {
-      const data = JSON.parse(settingsJson);
-      if (typeof data.highpass === 'number') setHighpass(data.highpass);
-      if (typeof data.lowpass === 'number') setLowpass(data.lowpass);
-      if (typeof data.gain === 'number') setGain(data.gain);
-      if (typeof data.bassGain === 'number') setBassGain(data.bassGain);
-      if (typeof data.presenceGain === 'number') setPresenceGain(data.presenceGain);
-      if (typeof data.presenceFreq === 'number') setPresenceFreq(data.presenceFreq);
-      if (typeof data.trebleGain === 'number') setTrebleGain(data.trebleGain);
-      if (typeof data.stereoPan === 'number') setStereoPan(data.stereoPan);
-      if (typeof data.reverbMix === 'number') setReverbMix(data.reverbMix);
-      setExportDialogOpen(false);
-    } catch {
-      alert('JSON không hợp lệ, vui lòng kiểm tra lại.');
-    }
-  };
 
   return (
     <Box>
@@ -477,12 +408,6 @@ export default function AudioEQGamePage() {
           >
             Preset
           </Button>
-          <Button variant="outlined" startIcon={<Save />} onClick={exportSettings}>
-            Export
-          </Button>
-          <Button variant="outlined" startIcon={<SettingsBackupRestore />} onClick={() => setExportDialogOpen(true)}>
-            Import
-          </Button>
           <Button
             variant="contained"
             color={playing ? 'warning' : 'primary'}
@@ -501,7 +426,6 @@ export default function AudioEQGamePage() {
         <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mt: 2 }}>
           <Tab icon={<Equalizer />} iconPosition="start" label="Điều khiển" />
           <Tab icon={<Info />} iconPosition="start" label="Visualizer" />
-          <Tab icon={<GraphicEq />} iconPosition="start" label="Learning" />
         </Tabs>
       </Paper>
 
@@ -588,24 +512,6 @@ export default function AudioEQGamePage() {
         </Paper>
       )}
 
-      {tab === 2 && (
-        <Grid container spacing={2}>
-          {learningMissions.map((mission) => (
-            <Grid item xs={12} md={4} key={mission.title}>
-              <Paper sx={{ p: 2, height: '100%' }}>
-                <Typography variant="subtitle1" gutterBottom>{mission.title}</Typography>
-                <ol>
-                  {mission.steps.map((step) => (
-                    <li key={step}>
-                      <Typography variant="body2">{step}</Typography>
-                    </li>
-                  ))}
-                </ol>
-              </Paper>
-            </Grid>
-          ))}
-        </Grid>
-      )}
 
       <Menu anchorEl={presetAnchor} open={Boolean(presetAnchor)} onClose={() => setPresetAnchor(null)}>
         {presets.map((preset) => (
@@ -621,26 +527,6 @@ export default function AudioEQGamePage() {
         ))}
       </Menu>
 
-      <Dialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Cấu hình EQ</DialogTitle>
-        <DialogContent>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Sao chép JSON để lưu preset hoặc dán JSON để import.
-          </Alert>
-          <TextField
-            fullWidth
-            multiline
-            minRows={8}
-            value={settingsJson}
-            onChange={(e) => setSettingsJson(e.target.value)}
-            placeholder="{ ... }"
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setExportDialogOpen(false)}>Đóng</Button>
-          <Button variant="contained" onClick={importSettings}>Import</Button>
-        </DialogActions>
-      </Dialog>
 
       <audio ref={audioRef} controls style={{ display: 'none' }} />
     </Box>

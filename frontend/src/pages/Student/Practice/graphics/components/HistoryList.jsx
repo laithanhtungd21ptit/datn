@@ -23,13 +23,15 @@ const MiniMatrixFromElements = ({ elements, onClick, disabled = false }) => {
       fullWidth
       disabled={disabled}
       sx={{
-        mt: 1,
-        p: 1,
+        mt: 0.5,
+        p: 0.75,
         bgcolor: 'rgba(0, 0, 0, 0.4)',
         border: '1px solid',
         borderColor: 'divider',
         position: 'relative',
         overflow: 'hidden',
+        minWidth: 0,
+        width: '100%',
         cursor: disabled ? 'default' : 'pointer',
         '&:hover': disabled ? {} : {
           bgcolor: 'rgba(59, 130, 246, 0.1)',
@@ -72,7 +74,7 @@ const MiniMatrixFromElements = ({ elements, onClick, disabled = false }) => {
         }
       }}
     >
-      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.5, width: '100%' }}>
+      <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 0.5, width: '100%', minWidth: 0 }}>
         {rows.flat().map((val, i) => {
           const colIdx = i % 4;
           const rowIdx = Math.floor(i / 4);
@@ -187,7 +189,7 @@ const HistoryList = ({ history, numPoints, onInspectTransformation }) => {
         />
       </Box>
       
-      <Box sx={{ flex: 1, overflowY: 'auto', p: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', p: 1.5, display: 'flex', flexDirection: 'column', gap: 1.5 }}>
         {generations.length === 0 && (
           <Typography variant="body2" sx={{ color: 'text.disabled', fontStyle: 'italic', textAlign: 'center', py: 5 }}>
             Chưa có dữ liệu.
@@ -204,13 +206,15 @@ const HistoryList = ({ history, numPoints, onInspectTransformation }) => {
             <Card
               key={`generation-${genIdx}`}
               sx={{
-                p: 1.5,
+                p: 1,
                 bgcolor: 'background.paper',
                 border: '1px solid',
                 borderColor: 'divider',
                 display: 'flex',
                 flexDirection: 'column',
-                gap: 1,
+                gap: 0.75,
+                flexShrink: 0,
+                minHeight: 'fit-content',
                 transition: 'all 0.3s',
                 '&:hover': {
                   borderColor: 'primary.main',
@@ -222,13 +226,13 @@ const HistoryList = ({ history, numPoints, onInspectTransformation }) => {
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                 <Box
                   sx={{
-                    width: 24,
-                    height: 24,
+                    width: 20,
+                    height: 20,
                     borderRadius: 1,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: '0.65rem',
+                    fontSize: '0.6rem',
                     fontWeight: 'bold',
                     bgcolor: `${generation[0].color}22`,
                     color: generation[0].color,
@@ -248,8 +252,8 @@ const HistoryList = ({ history, numPoints, onInspectTransformation }) => {
                 </Box>
               </Box>
 
-              <Box>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+              <Box sx={{ flexShrink: 0, minWidth: 0 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.25 }}>
                   <Typography variant="caption" sx={{ fontSize: '0.55rem', color: 'text.disabled', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                     {isInitial ? 'Ma trận đơn vị' : 'Ma trận biến đổi'}
                   </Typography>
@@ -259,11 +263,13 @@ const HistoryList = ({ history, numPoints, onInspectTransformation }) => {
                     </Typography>
                   )}
                 </Box>
-                <MiniMatrixFromElements 
-                  elements={transformMatrix}
-                  onClick={() => !isInitial && onInspectTransformation(genIdx, generation, previousGeneration)}
-                  disabled={isInitial}
-                />
+                <Box sx={{ width: '100%', minWidth: 0 }}>
+                  <MiniMatrixFromElements 
+                    elements={transformMatrix}
+                    onClick={() => !isInitial && onInspectTransformation(genIdx, generation, previousGeneration)}
+                    disabled={isInitial}
+                  />
+                </Box>
               </Box>
             </Card>
           );

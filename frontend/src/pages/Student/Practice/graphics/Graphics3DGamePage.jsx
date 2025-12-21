@@ -126,6 +126,19 @@ const Graphics3DGamePage = () => {
       const colorIndex = currentGeneration % TRANSFORMATION_COLORS.length;
       const generationColor = TRANSFORMATION_COLORS[colorIndex];
       
+      // Count total number of transformations already applied (excluding initial generation)
+      // currentGeneration includes initial generation (generation 0)
+      // So number of transformations already applied = currentGeneration - 1
+      // Then add 1 for the current transformation being applied
+      const existingTransformCount = currentGeneration - 1;
+      const transformCount = existingTransformCount + 1;
+      
+      // Create label similar to HistoryList format: "Điểm X - Type #N"
+      // Where N is the sequential order of all transformations
+      const label = numPoints === 1 
+        ? `${type} #${transformCount}` 
+        : `Điểm ${idx + 1} - ${type} #${transformCount}`;
+      
       newObjects.push({
         id: Math.random().toString(36).substr(2, 9),
         type,
@@ -133,7 +146,7 @@ const Graphics3DGamePage = () => {
         rotation: newRotation,
         scale: newScale,
         color: generationColor, // Same color for all points in this generation
-        label: numPoints === 1 ? `${type} #${currentGeneration + 1}` : `Điểm ${idx + 1} - ${type}`,
+        label,
         timestamp: Date.now(),
         appliedTransformParams: params
       });

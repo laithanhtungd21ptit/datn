@@ -13,13 +13,8 @@ import {
   IconButton,
   Menu,
   MenuItem,
-  TextField,
   Alert,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
 } from '@mui/material';
 import {
   Undo,
@@ -28,9 +23,7 @@ import {
   CompareArrows,
   FilterList,
   Info,
-  Save,
   Upload,
-  Image as ImageIcon,
   Delete,
   Refresh,
 } from '@mui/icons-material';
@@ -148,8 +141,6 @@ const presets = [
 
 export default function ImageProcessingGamePage() {
   const resultCanvasRef = useRef(null);
-  const histogramCanvasRef = useRef(null);
-  const histogramRgbCanvasRef = useRef(null);
   const originalCanvasRef = useRef(null);
   const compareCanvasRef = useRef(null);
   
@@ -163,43 +154,8 @@ export default function ImageProcessingGamePage() {
   const [filterInfoAnchor, setFilterInfoAnchor] = useState(null);
   const [selectedFilterInfo, setSelectedFilterInfo] = useState(null);
   const [presetMenuAnchor, setPresetMenuAnchor] = useState(null);
-  const [exportDialogOpen, setExportDialogOpen] = useState(false);
-  const [importText, setImportText] = useState('');
   const dragItemIndexRef = useRef(null);
 
-  // Sample images
-  const loadSampleImage = () => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 400;
-    canvas.height = 300;
-    const ctx = canvas.getContext('2d');
-    
-    // Create gradient background
-    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    gradient.addColorStop(0, '#ff6b6b');
-    gradient.addColorStop(0.5, '#4ecdc4');
-    gradient.addColorStop(1, '#45b7d1');
-    ctx.fillStyle = gradient;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Add some shapes
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
-    ctx.beginPath();
-    ctx.arc(100, 100, 50, 0, Math.PI * 2);
-    ctx.fill();
-    
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    ctx.fillRect(200, 150, 150, 100);
-    
-    // Convert to image
-    const img = new Image();
-    img.onload = () => {
-      setOriginalImage(img);
-      drawOriginalToCanvas(img);
-      addToHistory([]);
-    };
-    img.src = canvas.toDataURL();
-  };
 
   const handleUpload = (e) => {
     const file = e.target.files?.[0];
@@ -327,38 +283,6 @@ export default function ImageProcessingGamePage() {
     setPresetMenuAnchor(null);
   };
 
-  const exportPipeline = () => {
-    const exportData = {
-      version: '1.0',
-      pipeline: pipeline.map(f => ({
-        type: f.type,
-        params: f.params,
-        disabled: f.disabled,
-      })),
-    };
-    setImportText(JSON.stringify(exportData, null, 2));
-    setExportDialogOpen(true);
-  };
-
-  const importPipeline = () => {
-    try {
-      const data = JSON.parse(importText);
-      if (data.pipeline && Array.isArray(data.pipeline)) {
-        const newPipeline = data.pipeline.map((f, idx) => ({
-          id: `${f.type}-${Date.now()}-${idx}`,
-          type: f.type,
-          params: f.params || {},
-          disabled: f.disabled || false,
-        }));
-        setPipeline(newPipeline);
-        addToHistory(newPipeline);
-        setExportDialogOpen(false);
-        setImportText('');
-      }
-    } catch (e) {
-      alert('Lỗi: Dữ liệu không hợp lệ!');
-    }
-  };
 
   const downloadResult = () => {
     const canvas = resultCanvasRef.current;
@@ -403,125 +327,11 @@ export default function ImageProcessingGamePage() {
         }
       }
       
-      drawHistogram(imgData);
-      drawRgbHistogram(imgData);
     } finally {
       setIsApplying(false);
     }
   };
 
-  const drawHistogram = (imageData) => {
-    const canvas = histogramCanvasRef.current;
-    if (!canvas) return;
-    const w = 256;
-    const h = 100;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    const hist = new Array(256).fill(0);
-    const d = imageData.data;
-    for (let i = 0; i < d.length; i += 4) {
-      hist[toGray(d[i], d[i + 1], d[i + 2])]++;
-    }
-    const maxV = Math.max(...hist) || 1;
-    ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#90caf9';
-    for (let x = 0; x < 256; x++) {
-      const v = Math.round((hist[x] / maxV) * (h - 2));
-      ctx.fillRect(x, h - v, 1, v);
-    }
-  };
-
-  const drawRgbHistogram = (imageData) => {
-    const canvas = histogramRgbCanvasRef.current;
-    if (!canvas) return;
-    const w = 256;
-    const h = 120;
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    const histR = new Array(256).fill(0);
-    const histG = new Array(256).fill(0);
-    const histB = new Array(256).fill(0);
-    const d = imageData.data;
-    
-    for (let i = 0; i < d.length; i += 4) {
-      histR[d[i]]++;
-      histG[d[i + 1]]++;
-      histB[d[i + 2]]++;
-    }
-    
-    const maxV = Math.max(...histR, ...histG, ...histB) || 1;
-    ctx.fillStyle = '#111';
-    ctx.fillRect(0, 0, w, h);
-    
-    // Draw R channel
-    ctx.fillStyle = 'rgba(255, 0, 0, 0.6)';
-    for (let x = 0; x < 256; x++) {
-      const v = Math.round((histR[x] / maxV) * (h - 2));
-      ctx.fillRect(x, h - v, 1, v);
-    }
-    
-    // Draw G channel
-    ctx.fillStyle = 'rgba(0, 255, 0, 0.6)';
-    for (let x = 0; x < 256; x++) {
-      const v = Math.round((histG[x] / maxV) * (h - 2));
-      ctx.fillRect(x, h - v, 1, v);
-    }
-    
-    // Draw B channel
-    ctx.fillStyle = 'rgba(0, 0, 255, 0.6)';
-    for (let x = 0; x < 256; x++) {
-      const v = Math.round((histB[x] / maxV) * (h - 2));
-      ctx.fillRect(x, h - v, 1, v);
-    }
-  };
-
-  const calculateStats = (imageData) => {
-    const d = imageData.data;
-    let sumR = 0, sumG = 0, sumB = 0;
-    let sumR2 = 0, sumG2 = 0, sumB2 = 0;
-    const count = d.length / 4;
-    
-    for (let i = 0; i < d.length; i += 4) {
-      sumR += d[i];
-      sumG += d[i + 1];
-      sumB += d[i + 2];
-      sumR2 += d[i] * d[i];
-      sumG2 += d[i + 1] * d[i + 1];
-      sumB2 += d[i + 2] * d[i + 2];
-    }
-    
-    const meanR = sumR / count;
-    const meanG = sumG / count;
-    const meanB = sumB / count;
-    
-    const varianceR = (sumR2 / count) - (meanR * meanR);
-    const varianceG = (sumG2 / count) - (meanG * meanG);
-    const varianceB = (sumB2 / count) - (meanB * meanB);
-    
-    return {
-      meanR: meanR.toFixed(2),
-      meanG: meanG.toFixed(2),
-      meanB: meanB.toFixed(2),
-      stdR: Math.sqrt(varianceR).toFixed(2),
-      stdG: Math.sqrt(varianceG).toFixed(2),
-      stdB: Math.sqrt(varianceB).toFixed(2),
-    };
-  };
-
-  const [stats, setStats] = useState(null);
-
-  useEffect(() => {
-    if (resultCanvasRef.current && originalImage) {
-      const ctx = resultCanvasRef.current.getContext('2d');
-      const imageData = ctx.getImageData(0, 0, resultCanvasRef.current.width, resultCanvasRef.current.height);
-      if (imageData.data.length > 0) {
-        setStats(calculateStats(imageData));
-      }
-    }
-  }, [pipeline, originalImage, isApplying]);
 
   // Filters implementation (keeping all existing filter functions)
   const applyFilter = async (imageData, filter) => {
@@ -837,21 +647,12 @@ export default function ImageProcessingGamePage() {
             Tải ảnh lên
             <input type="file" accept="image/*" hidden onChange={handleUpload} />
           </Button>
-          <Button variant="outlined" startIcon={<ImageIcon />} onClick={loadSampleImage}>
-            Ảnh mẫu
-          </Button>
           <Button 
             variant="outlined" 
             startIcon={<FilterList />}
             onClick={(e) => setPresetMenuAnchor(e.currentTarget)}
           >
             Preset
-          </Button>
-          <Button variant="outlined" startIcon={<Save />} onClick={exportPipeline}>
-            Export
-          </Button>
-          <Button variant="outlined" startIcon={<Upload />} onClick={() => setExportDialogOpen(true)}>
-            Import
           </Button>
           <Box sx={{ flex: 1 }} />
           <IconButton disabled={!canUndo} onClick={undo} title="Undo">
@@ -888,8 +689,6 @@ export default function ImageProcessingGamePage() {
 
         <Tabs value={selectedTab} onChange={(e, v) => setSelectedTab(v)}>
           <Tab label="Bộ lọc" />
-          <Tab label="Thống kê" />
-          <Tab label="Histogram" />
         </Tabs>
       </Paper>
 
@@ -903,7 +702,7 @@ export default function ImageProcessingGamePage() {
               {!originalImage && (
                 <Box sx={{ p: 4, textAlign: 'center', color: 'text.secondary' }}>
                   <Typography>Chưa có ảnh</Typography>
-                  <Typography variant="caption">Tải ảnh lên hoặc chọn ảnh mẫu</Typography>
+                  <Typography variant="caption">Tải ảnh lên để bắt đầu</Typography>
                 </Box>
               )}
             </Box>
@@ -1083,64 +882,6 @@ export default function ImageProcessingGamePage() {
           </Grid>
         )}
 
-        {/* Statistics Tab */}
-        {selectedTab === 1 && (
-          <Grid item xs={12} md={viewMode === 'split' ? 6 : 8}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Thống kê ảnh</Typography>
-              {stats ? (
-                <Grid container spacing={2}>
-                  <Grid item xs={12} sm={6} md={4}>
-                    <Paper sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText' }}>
-                      <Typography variant="subtitle2">Kênh R</Typography>
-                      <Typography variant="h6">Mean: {stats.meanR}</Typography>
-                      <Typography variant="body2">Std Dev: {stats.stdR}</Typography>
-                    </Paper>
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={4}>
-                    <Paper sx={{ p: 2, bgcolor: 'success.light', color: 'success.contrastText' }}>
-                      <Typography variant="subtitle2">Kênh G</Typography>
-                      <Typography variant="h6">Mean: {stats.meanG}</Typography>
-                      <Typography variant="body2">Std Dev: {stats.stdG}</Typography>
-                    </Paper>
-                  </Grid>
-                  <Grid item xs={12} sm={6} md={4}>
-                    <Paper sx={{ p: 2, bgcolor: 'primary.light', color: 'primary.contrastText' }}>
-                      <Typography variant="subtitle2">Kênh B</Typography>
-                      <Typography variant="h6">Mean: {stats.meanB}</Typography>
-                      <Typography variant="body2">Std Dev: {stats.stdB}</Typography>
-                    </Paper>
-                  </Grid>
-                </Grid>
-              ) : (
-                <Alert severity="info">Chưa có dữ liệu thống kê. Vui lòng tải ảnh và áp dụng bộ lọc.</Alert>
-              )}
-            </Paper>
-          </Grid>
-        )}
-
-        {/* Histogram Tab */}
-        {selectedTab === 2 && (
-          <Grid item xs={12} md={viewMode === 'split' ? 6 : 8}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Histogram</Typography>
-              <Paper sx={{ p: 2, mb: 2, bgcolor: 'background.default' }}>
-                <Typography variant="subtitle2" gutterBottom>Histogram Grayscale</Typography>
-                <canvas ref={histogramCanvasRef} style={{ width: '100%', height: 120 }} />
-              </Paper>
-              <Paper sx={{ p: 2, bgcolor: 'background.default' }}>
-                <Typography variant="subtitle2" gutterBottom>RGB Histogram</Typography>
-                <canvas ref={histogramRgbCanvasRef} style={{ width: '100%', height: 120 }} />
-                <Box sx={{ display: 'flex', gap: 2, mt: 1 }}>
-                  <Chip label="R" sx={{ bgcolor: 'rgba(255, 0, 0, 0.6)' }} />
-                  <Chip label="G" sx={{ bgcolor: 'rgba(0, 255, 0, 0.6)' }} />
-                  <Chip label="B" sx={{ bgcolor: 'rgba(0, 0, 255, 0.6)' }} />
-                </Box>
-              </Paper>
-            </Paper>
-          </Grid>
-        )}
-
         {/* Right: Kết quả */}
         {selectedTab === 0 && (
           <Grid item xs={12} md={viewMode === 'split' ? 6 : 4}>
@@ -1207,25 +948,6 @@ export default function ImageProcessingGamePage() {
         )}
       </Menu>
 
-      {/* Export/Import Dialog */}
-      <Dialog open={exportDialogOpen} onClose={() => setExportDialogOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Export/Import Pipeline</DialogTitle>
-        <DialogContent>
-          <TextField
-            fullWidth
-            multiline
-            rows={10}
-            value={importText}
-            onChange={(e) => setImportText(e.target.value)}
-            label="JSON Pipeline Data"
-            placeholder="Paste pipeline JSON here to import..."
-          />
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setExportDialogOpen(false)}>Đóng</Button>
-          <Button onClick={importPipeline} variant="contained">Import</Button>
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 }

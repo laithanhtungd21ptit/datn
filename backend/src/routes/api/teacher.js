@@ -1118,11 +1118,82 @@ teacherRouter.post('/notifications/mark-all-read', async (req, res) => {
 
   try {
     const now = new Date();
+    const classIds = await ClassModel.find({ teacherId }).distinct('_id');
     
-    // Update lastNotificationReadAt to mark all current notifications as read
+    // Get all current notification IDs (same logic as GET /notifications)
+    const notificationIds = [];
+    
+    // Recent submissions
+    const assignmentIds = await AssignmentModel.find({ classId: { $in: classIds } }).distinct('_id');
+    const recentSubmissions = await SubmissionModel.find({
+      assignmentId: { $in: assignmentIds },
+      createdAt: { $gte: new Date(Date.now() - 24 * 3600 * 1000) }
+    })
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .populate({
+        path: 'assignmentId',
+        select: 'title classId',
+        populate: { path: 'classId', select: 'name' }
+      })
+      .lean();
+    
+    for (const sub of recentSubmissions) {
+      if (sub.assignmentId && sub.assignmentId.classId) {
+        notificationIds.push(`submission-${sub._id}`);
+      }
+    }
+    
+    // Unsubmitted assignments
+    const assignments = await AssignmentModel.find({
+      classId: { $in: classIds },
+      dueDate: { $gte: new Date() }
+    })
+      .populate('classId', 'name')
+      .lean();
+    
+    for (const assignment of assignments) {
+      const submissionCount = await SubmissionModel.countDocuments({ assignmentId: assignment._id });
+      const enrollmentCount = await EnrollmentModel.countDocuments({
+        classId: assignment.classId,
+        status: 'enrolled'
+      });
+      
+      if (submissionCount < enrollmentCount) {
+        notificationIds.push(`unsubmitted-${assignment._id}`);
+      }
+    }
+    
+    // Recent comments
+    const recentComments = await CommentModel.find({
+      classId: { $in: classIds },
+      userRole: 'student',
+      createdAt: { $gte: new Date(Date.now() - 24 * 3600 * 1000) }
+    })
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean();
+    
+    for (const comment of recentComments) {
+      notificationIds.push(`comment-${comment._id}`);
+    }
+    
+    // Get current user's read notification IDs
+    const user = await UserModel.findById(teacherId).select('teacherReadNotificationIds').lean();
+    const readIds = new Set(user?.teacherReadNotificationIds || []);
+    
+    // Add all current notification IDs to the set
+    notificationIds.forEach(id => readIds.add(id));
+    
+    // Update both lastNotificationReadAt and teacherReadNotificationIds
     await UserModel.updateOne(
       { _id: teacherId },
-      { $set: { lastNotificationReadAt: now } }
+      { 
+        $set: { 
+          lastNotificationReadAt: now,
+          teacherReadNotificationIds: Array.from(readIds)
+        } 
+      }
     );
 
     res.json({ success: true });

@@ -75,9 +75,9 @@ const StudentClassDetailScreen: React.FC = () => {
         api.studentClassAssignments(classId),
         api.studentGetComments(classId),
       ]);
-      setClassData(detail);
-      setAssignments(classAssignments || []);
-      setComments(classComments || []);
+      setClassData(detail as ClassDetail | null);
+      setAssignments((classAssignments as Assignment[]) || []);
+      setComments((classComments as Comment[]) || []);
     } catch (e) {
       console.warn('Không thể tải chi tiết lớp', e);
     }
@@ -95,7 +95,7 @@ const StudentClassDetailScreen: React.FC = () => {
       const comment = await api.studentCreateComment(classId, {
         content: newComment.trim(),
       });
-      setComments(prev => [comment, ...prev]);
+      setComments(prev => [comment as Comment, ...prev]);
       setNewComment('');
     } catch (e) {
       console.warn('Không thể gửi bình luận', e);
@@ -217,14 +217,18 @@ const StudentClassDetailScreen: React.FC = () => {
     <TabBar
       {...props}
       scrollEnabled
-      indicatorStyle={{ backgroundColor: colors.primary }}
+      indicatorStyle={{ backgroundColor: colors.primary, height: 3 }}
       style={{ backgroundColor: colors.surface }}
+      activeColor={colors.primary}
+      inactiveColor={colors.textSecondary}
       labelStyle={{
-        color: colors.secondary,
         fontWeight: '600',
         textTransform: 'none',
+        fontSize: 14,
       }}
-      inactiveColor={colors.textSecondary}
+      tabStyle={{
+        backgroundColor: colors.surface,
+      }}
     />
   );
 

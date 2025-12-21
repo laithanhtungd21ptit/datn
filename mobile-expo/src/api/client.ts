@@ -204,6 +204,8 @@ export async function apiRequest<T>(
           userFriendlyMessage = 'Tài khoản đã bị khóa';
         } else if (errorMessage === 'ROLE_MISMATCH') {
           userFriendlyMessage = 'Vai trò không khớp';
+        } else if (errorMessage === 'CLASS_NOT_FOUND') {
+          userFriendlyMessage = 'CLASS_NOT_FOUND';
         }
 
         if (response.status === 401) {
@@ -212,12 +214,13 @@ export async function apiRequest<T>(
           throw new Error(userFriendlyMessage);
         }
 
-        if (response.status >= 500 || response.status === 404) {
+        if (response.status >= 500) {
           throw new Error(
             userFriendlyMessage || 'Máy chủ đang bận, thử lại sau',
           );
         }
 
+        // For 404 and other client errors, throw the error message as-is
         throw new Error(userFriendlyMessage || 'Yêu cầu thất bại');
       }
 

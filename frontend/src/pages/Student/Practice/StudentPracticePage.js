@@ -8,7 +8,6 @@ import {
   CardContent,
 } from '@mui/material';
 import {
-  CameraAlt,
   Videocam,
   Image,
   Brush,
@@ -19,35 +18,11 @@ const StudentPracticePage = () => {
 
   const subjects = [
     {
-      id: 'photography',
-      name: 'Kỹ thuật nhiếp ảnh',
-      icon: <CameraAlt sx={{ fontSize: 60 }} />,
-      color: '#1976d2',
-      description: 'Thực hành các kỹ thuật chụp ảnh, điều chỉnh ánh sáng, bố cục và xử lý hậu kỳ',
-      games: [
-        {
-          id: 'exposure-game',
-          title: 'Game điều chỉnh độ phơi sáng',
-          description: 'Học cách điều chỉnh khẩu độ, tốc độ màn trập và ISO để có độ phơi sáng phù hợp',
-        },
-        {
-          id: 'composition-game',
-          title: 'Game bố cục ảnh',
-          description: 'Thực hành các quy tắc bố cục như quy tắc 1/3, đường dẫn, khung hình',
-        },
-        {
-          id: 'lighting-game',
-          title: 'Game ánh sáng',
-          description: 'Học cách sử dụng ánh sáng tự nhiên và nhân tạo trong nhiếp ảnh',
-        },
-      ],
-    },
-    {
       id: 'multimedia',
       name: 'Xử lý và truyền thông đa phương tiện',
       icon: <Image sx={{ fontSize: 60 }} />,
       color: '#388e3c',
-      description: 'Thực hành xử lý hình ảnh, video, audio và tích hợp đa phương tiện',
+      description: 'Thực hành xử lý hình ảnh đa phương tiện',
       games: [
         {
           id: 'image-processing-game',
@@ -75,7 +50,7 @@ const StudentPracticePage = () => {
       name: 'Kỹ thuật đồ họa',
       icon: <Brush sx={{ fontSize: 60 }} />,
       color: '#f57c00',
-      description: 'Thực hành các kỹ thuật thiết kế đồ họa, xử lý vector, màu sắc và bố cục',
+      description: 'Thực hành các kỹ thuật biến đổi tọa độ',
       games: [
         {
           id: 'color-theory-game',

@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Modal,
   RefreshControl,
@@ -126,6 +127,13 @@ const StudentAssignmentsScreen: React.FC = () => {
       // For exams we navigate to exam screen later
       return;
     }
+    // Check if already submitted
+    const status = assignment.status || 'not_submitted';
+    if (status !== 'not_submitted' && status !== 'overdue') {
+      // Already submitted, show error
+      setError('Bạn đã nộp bài này rồi. Vui lòng xem bài nộp trong tab "Đã nộp".');
+      return;
+    }
     setSelectedAssignment(assignment);
     setFiles([]);
     setNotes('');
@@ -205,24 +213,45 @@ const StudentAssignmentsScreen: React.FC = () => {
             : 'Chưa rõ'}
         </Text>
         <View style={styles.assignmentActions}>
-          <TouchableOpacity
-            style={[
-              styles.actionButton,
-              item.isExam ? styles.secondaryButton : styles.primaryButton,
-            ]}
-            onPress={() => {
-              if (item.isExam) {
-                // Navigate to exam screen
-                // TODO: implement exam navigation
-              } else {
-                openSubmitModal(item);
-              }
-            }}
-          >
-            <Text style={styles.actionText}>
-              {item.isExam ? 'Vào phòng thi' : 'Nộp bài'}
-            </Text>
-          </TouchableOpacity>
+          {(() => {
+            const assignmentStatus = item.status || 'not_submitted';
+            const isSubmitted = assignmentStatus !== 'not_submitted' && assignmentStatus !== 'overdue';
+            
+            if (isSubmitted) {
+              return (
+                <TouchableOpacity
+                  style={[styles.actionButton, styles.disabledButton]}
+                  disabled={true}
+                >
+                  <Text style={styles.disabledText}>Đã nộp</Text>
+                </TouchableOpacity>
+              );
+            }
+            
+            return (
+              <TouchableOpacity
+                style={[
+                  styles.actionButton,
+                  item.isExam ? styles.secondaryButton : styles.primaryButton,
+                ]}
+                onPress={() => {
+                  if (item.isExam) {
+                    Alert.alert(
+                      'Thông báo',
+                      'Hệ thống chưa hỗ trợ chức năng này trên thiết bị di động. Vui lòng sử dụng trình duyệt web để tham gia thi.',
+                      [{ text: 'Đã hiểu', style: 'default' }]
+                    );
+                  } else {
+                    openSubmitModal(item);
+                  }
+                }}
+              >
+                <Text style={styles.actionText}>
+                  {item.isExam ? 'Vào phòng thi' : 'Nộp bài'}
+                </Text>
+              </TouchableOpacity>
+            );
+          })()}
         </View>
       </View>
     );
@@ -501,8 +530,16 @@ const styles = StyleSheet.create({
   secondaryButton: {
     backgroundColor: colors.secondary,
   },
+  disabledButton: {
+    backgroundColor: colors.border,
+    opacity: 0.6,
+  },
   actionText: {
     color: '#fff',
+    fontWeight: '600',
+  },
+  disabledText: {
+    color: colors.textSecondary,
     fontWeight: '600',
   },
   emptyState: {

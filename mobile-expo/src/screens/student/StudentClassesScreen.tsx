@@ -35,6 +35,7 @@ const StudentClassesScreen: React.FC = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [joinModalVisible, setJoinModalVisible] = useState(false);
   const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState<string | null>(null);
 
   const loadClasses = useCallback(async () => {
     setIsRefreshing(true);
@@ -72,13 +73,21 @@ const StudentClassesScreen: React.FC = () => {
       return;
     }
     setLoading(true);
+    setJoinError(null);
     try {
       await api.studentJoinClass(joinCode.trim());
       setJoinModalVisible(false);
       setJoinCode('');
+      setJoinError(null);
       await loadClasses();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Không thể tham gia lớp học');
+      const errorMessage = e instanceof Error ? e.message : 'Không thể tham gia lớp học';
+      // Check if error is CLASS_NOT_FOUND or 404
+      if (errorMessage.includes('CLASS_NOT_FOUND') || errorMessage.includes('404') || errorMessage.includes('not found')) {
+        setJoinError('Mã lớp không tồn tại');
+      } else {
+        setJoinError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }
@@ -185,7 +194,11 @@ const StudentClassesScreen: React.FC = () => {
         animationType="slide"
         transparent
         visible={joinModalVisible}
-        onRequestClose={() => setJoinModalVisible(false)}
+        onRequestClose={() => {
+          setJoinModalVisible(false);
+          setJoinError(null);
+          setJoinCode('');
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -198,12 +211,22 @@ const StudentClassesScreen: React.FC = () => {
               placeholder="Ví dụ: WEB001"
               autoCapitalize="characters"
               value={joinCode}
-              onChangeText={setJoinCode}
+              onChangeText={(text) => {
+                setJoinCode(text);
+                setJoinError(null);
+              }}
             />
+            {joinError ? (
+              <Text style={styles.modalErrorText}>{joinError}</Text>
+            ) : null}
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalCancel]}
-                onPress={() => setJoinModalVisible(false)}
+                onPress={() => {
+                  setJoinModalVisible(false);
+                  setJoinError(null);
+                  setJoinCode('');
+                }}
               >
                 <Text>Hủy</Text>
               </TouchableOpacity>
@@ -387,7 +410,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
+    marginBottom: 8,
+  },
+  modalErrorText: {
+    color: '#dc2626',
+    fontSize: 14,
     marginBottom: 16,
+    marginTop: -8,
   },
   modalActions: {
     flexDirection: 'row',
