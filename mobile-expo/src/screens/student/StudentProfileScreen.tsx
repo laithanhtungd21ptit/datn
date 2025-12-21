@@ -15,7 +15,7 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { api } from '../../api/client';
 import { colors } from '../../theme/colors';
-import { getAvatarUrl } from '../../utils/avatarHelper';
+import { getAvatarUrl } from '../../theme/avatarHelper';
 
 type Profile = {
   fullName: string;
