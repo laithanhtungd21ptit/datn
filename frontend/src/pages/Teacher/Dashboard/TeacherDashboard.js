@@ -34,6 +34,7 @@ import {
   Info,
 } from '@mui/icons-material';
 import { api } from '../../../api/client';
+import socketService from '../../../services/SocketService';
 
 const TeacherDashboard = () => {
   const navigate = useNavigate();
@@ -49,6 +50,22 @@ const TeacherDashboard = () => {
   const [notifications, setNotifications] = useState([]);
   const [todaySchedule, setTodaySchedule] = useState([]);
   const [quickStats, setQuickStats] = useState([]);
+
+  useEffect(() => {
+    const handleNewNotification = (notification) => {
+      setNotifications(prev => {
+        const exists = prev.some(n => n.id === notification.id);
+        if (exists) return prev;
+        return [notification, ...prev];
+      });
+    };
+
+    socketService.onNewNotification(handleNewNotification);
+
+    return () => {
+      socketService.offNewNotification();
+    };
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -154,7 +171,7 @@ const TeacherDashboard = () => {
   return (
     <Box>
       <Typography variant="h4" gutterBottom>
-        Dashboard Giảng viên
+        Trang chủ Giảng viên
       </Typography>
       <Typography variant="subtitle1" color="text.secondary" gutterBottom>
         Chào mừng bạn trở lại! Đây là tổng quan về hoạt động giảng dạy của bạn.

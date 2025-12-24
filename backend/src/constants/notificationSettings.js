@@ -9,6 +9,8 @@ export const DEFAULT_NOTIFICATION_SETTINGS = {
 
 export const NOTIFICATION_TYPE_PREFERENCE = {
   assignment_created: 'assignmentDeadlines',
+  assignment_submitted: 'classAnnouncements',
+  assignment_pending: 'assignmentDeadlines',
   assignment_graded: 'gradeUpdates',
   document_uploaded: 'classAnnouncements',
   announcement_created: 'classAnnouncements',

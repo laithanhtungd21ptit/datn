@@ -243,7 +243,7 @@ const AdminDashboard = () => {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" gutterBottom>
-          Dashboard Quản trị viên
+          Trang chủ Quản trị viên
         </Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           <Button variant="outlined" startIcon={<Refresh />} onClick={loadDashboardData} disabled={loading}>
@@ -363,48 +363,6 @@ const AdminDashboard = () => {
             </Paper>
           </Grid>
         )}
-
-        {/* Fraud Warnings Section */}
-        <Grid item xs={12} md={4}>
-          <Paper sx={{ p: 2 }}>
-            <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Warning color="error" />
-              Cảnh báo gian lận
-            </Typography>
-            <Box sx={{ mb: 2 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Lớp học</InputLabel>
-                <Select
-                  value={''}
-                  onChange={() => {}}
-                  label="Lớp học"
-                  disabled
-                >
-                  <MenuItem value="">Chọn lớp học</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-            <Box sx={{ mb: 2 }}>
-              <FormControl fullWidth size="small">
-                <InputLabel>Bài thi</InputLabel>
-                <Select
-                  value={''}
-                  onChange={() => {}}
-                  label="Bài thi"
-                  disabled
-                >
-                  <MenuItem value="">Chọn bài thi</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-            <Alert severity="info" sx={{ mb: 2 }}>
-              Chức năng cảnh báo gian lận đang chờ triển khai. Sinh viên có thể gửi báo cáo gian lận trong quá trình thi.
-            </Alert>
-            <Typography variant="body2" color="text.secondary">
-              Chưa có báo cáo gian lận nào.
-            </Typography>
-          </Paper>
-        </Grid>
       </Grid>
     </Box>
   );

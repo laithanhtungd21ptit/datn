@@ -13,6 +13,9 @@ import { AnnouncementModel } from '../../models/Announcement.js';
 import { CommentModel } from '../../models/Comment.js';
 import { logUserActivity } from '../../utils/logger.js';
 import { normalizeNotificationSettings } from '../../constants/notificationSettings.js';
+import { NotificationModel } from '../../models/Notification.js';
+import { shouldDeliverNotification } from '../../constants/notificationSettings.js';
+import { emitNotificationToUser } from '../../services/socketService.js';
 
 const studentRouter = Router();
 
@@ -611,6 +614,46 @@ studentRouter.post('/submissions', upload.array('files', 5), async (req, res) =>
     { upsert: true, new: true }
   );
 
+  // Notify teacher in real-time when student submits
+  try {
+    const classDoc = await ClassModel.findById(assignment.classId).select('name teacherId').lean();
+    const teacherId = classDoc?.teacherId ? String(classDoc.teacherId) : null;
+
+    if (teacherId) {
+      const teacher = await UserModel.findById(teacherId).select('notificationSettings fullName').lean();
+      const student = await UserModel.findById(studentId).select('fullName').lean();
+
+      if (!teacher || shouldDeliverNotification(teacher.notificationSettings, 'assignment_submitted')) {
+        const title = `${student?.fullName || 'Sinh viên'} đã nộp "${assignment.title || 'Bài tập'}"`;
+        const content = `${student?.fullName || 'Sinh viên'} vừa nộp bài tập "${assignment.title || 'Bài tập'}" lúc ${new Date(submission.submittedAt || submission.createdAt).toLocaleString('vi-VN')}.`;
+
+        const notif = await NotificationModel.create({
+          recipientId: teacherId,
+          senderId: studentId,
+          classId: assignment.classId,
+          type: 'assignment_submitted',
+          title,
+          content,
+          isRead: false,
+          readAt: null,
+          metadata: {
+            assignmentId,
+            submissionId: submission._id,
+            studentId
+          }
+        });
+
+        emitNotificationToUser(teacherId, {
+          ...notif.toObject(),
+          senderId: { fullName: student?.fullName || 'Sinh viên' },
+          classId: { name: classDoc?.name || 'Unknown Class' }
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Failed to emit teacher submission notification:', error);
+  }
+
   // Log submit assignment activity
   try {
     await logUserActivity(
@@ -619,7 +662,7 @@ studentRouter.post('/submissions', upload.array('files', 5), async (req, res) =>
       'submit_assignment',
       assignmentId,
       'assignment',
-      `Submitted assignment: ${assignment?.title || 'Unknown'}`,
+      `Nộp bài tập: ${assignment?.title || 'Không xác định'}`,
       { filesCount: fileUrls.length, notes },
       req
     );

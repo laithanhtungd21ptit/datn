@@ -33,7 +33,7 @@ authRouter.post('/login', async (req, res) => {
   try {
   await UserModel.updateOne({ _id: user._id }, { $set: { lastLoginAt: new Date() } });
     // Log login activity
-    await logUserActivity(user._id, user.role, 'login', null, null, `User ${user.username} logged in`, {}, req);
+    await logUserActivity(user._id, user.role, 'login', null, null, `Người dùng ${user.username} đã đăng nhập`, {}, req);
   } catch {}
 
   return res.json({

@@ -9,6 +9,8 @@ const NotificationSchema = new mongoose.Schema(
       type: String,
       enum: [
         'assignment_created',
+        'assignment_submitted',
+        'assignment_pending',
         'assignment_graded',
         'document_uploaded',
         'announcement_created',

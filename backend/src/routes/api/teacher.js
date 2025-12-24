@@ -9,6 +9,7 @@ import { UserModel } from '../../models/User.js';
 import { DocumentModel } from '../../models/Document.js';
 import { AnnouncementModel } from '../../models/Announcement.js';
 import { CommentModel } from '../../models/Comment.js';
+import { NotificationModel } from '../../models/Notification.js';
 import { upload, useCloudinary } from '../../middleware/upload.js';
 import { uploadToCloudinary, deleteFromCloudinary } from '../../middleware/cloudinary.js';
 import { logUserActivity } from '../../utils/logger.js';
@@ -74,6 +75,32 @@ teacherRouter.get('/dashboard', async (req, res) => {
 
   // Generate notifications
   const notifications = [];
+
+  // DB-backed notifications for teacher (real-time emits)
+  try {
+    const dbNotifs = await NotificationModel.find({ recipientId: teacherId })
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .populate('senderId', 'fullName')
+      .populate('classId', 'name')
+      .lean();
+
+    for (const n of dbNotifs) {
+      notifications.push({
+        id: String(n._id),
+        type: n.type,
+        title: n.title,
+        content: n.content,
+        time: new Date(n.createdAt).toLocaleString('vi-VN'),
+        class: n.classId?.name || 'Unknown Class',
+        sender: n.senderId?.fullName || 'Hệ thống',
+        isRead: !!n.isRead,
+        createdAt: n.createdAt
+      });
+    }
+  } catch (error) {
+    console.error('Failed to load teacher DB notifications:', error);
+  }
 
   // Unsubmitted assignments notifications
   for (const stat of assignmentStats) {
@@ -566,7 +593,7 @@ teacherRouter.post('/assignments', async (req, res) => {
       'create_assignment',
       created._id,
       'assignment',
-      `Created ${isExam ? 'exam' : 'assignment'}: ${title}`,
+      `${isExam ? 'Tạo bài thi' : 'Tạo bài tập'}: ${title}`,
       { classId, className: cls.name, dueDate, isExam },
       req
     );
@@ -1081,7 +1108,14 @@ teacherRouter.get('/notifications', async (req, res) => {
 
   // Sort by createdAt descending and limit to 20
   notifications.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-  const limitedNotifications = notifications.slice(0, 20);
+  const seenIds = new Set();
+  const deduped = [];
+  for (const n of notifications) {
+    if (seenIds.has(n.id)) continue;
+    seenIds.add(n.id);
+    deduped.push(n);
+  }
+  const limitedNotifications = deduped.slice(0, 20);
 
   res.json(limitedNotifications);
 });
