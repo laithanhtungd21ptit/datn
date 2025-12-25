@@ -171,7 +171,7 @@ const TeacherDashboardScreen: React.FC = () => {
       {schedule.length > 0 && (
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Lịch dạy hôm nay</Text>
+            <Text style={styles.sectionTitle}>Lịch nộp hôm nay</Text>
             {schedule.length > 3 && (
               <TouchableOpacity
                 onPress={() => setShowAllSchedule(!showAllSchedule)}

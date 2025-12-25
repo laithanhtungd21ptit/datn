@@ -31,7 +31,10 @@ if (server) {
   try {
     io = new Server(server, {
       cors: {
-        origin: process.env.FRONTEND_URL || "http://localhost:3000",
+        origin: [
+          process.env.FRONTEND_URL || "http://localhost:3000",
+          "http://localhost:8081" // Expo Web
+        ],
         methods: ["GET", "POST"],
         credentials: true
       }
@@ -53,7 +56,8 @@ const port = Number(process.env.PORT || 4000);
 
 // CORS configuration
 const allowedOrigins = [
-  'http://localhost:3000', // Development
+  'http://localhost:3000', // Development - React Web
+  'http://localhost:8081', // Development - Expo Web
   'https://datn-2025-rwsy.vercel.app', // Production frontend
 ];
 
