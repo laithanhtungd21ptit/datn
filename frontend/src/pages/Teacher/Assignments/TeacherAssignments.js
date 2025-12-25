@@ -731,15 +731,60 @@ const TeacherAssignments = () => {
                         <Typography variant="body2" color="text.secondary" gutterBottom>
                           File đính kèm:
                         </Typography>
-                        {assignment.attachments.map((file, index) => (
+                        {assignment.attachments.map((file, index) => {
+                          // Extract filename
+                          let displayName = file.split('/').pop().split('?')[0];
+                          if (displayName.length > 30) {
+                            const ext = displayName.split('.').pop();
+                            displayName = displayName.substring(0, 20) + '...' + ext;
+                          }
+                          
+                          return (
                           <Chip
                             key={index}
                             icon={<AttachFile />}
-                            label={file}
+                            label={displayName}
+                            title={file.split('/').pop()}
                             size="small"
                             sx={{ mr: 1, mb: 1 }}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              
+                              let fileUrl = file.trim();
+                              
+                              if (fileUrl.startsWith('http')) {
+                                const ext = fileUrl.split('.').pop().toLowerCase().split('?')[0];
+                                if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                                  const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+                                  window.open(viewerUrl, '_blank');
+                                } else {
+                                  window.open(fileUrl, '_blank');
+                                }
+                                return;
+                              }
+                              
+                              let filePath = fileUrl.replace(/\/$/, '');
+                              if (!filePath.startsWith('/uploads/')) {
+                                filePath = filePath.startsWith('/') ? filePath : `/uploads/${filePath}`;
+                              }
+                              
+                              const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
+                              const fullUrl = `${backendUrl}${filePath}`;
+                              const ext = filePath.split('.').pop().toLowerCase();
+                              
+                              if (['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt'].includes(ext)) {
+                                window.open(fullUrl, '_blank');
+                              } else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                                const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fullUrl)}&embedded=true`;
+                                window.open(viewerUrl, '_blank');
+                              } else {
+                                window.open(fullUrl, '_blank');
+                              }
+                            }}
+                            clickable
                           />
-                        ))}
+                          );
+                        })}
                       </Box>
                     )}
                   </CardContent>
@@ -873,21 +918,84 @@ const TeacherAssignments = () => {
                       <TableCell>{formatDateTime(submission.submittedAt)}</TableCell>
                       <TableCell>
                       {submission.attachments && submission.attachments.length > 0 ? (
-                      submission.attachments.map((file, index) => (
+                      submission.attachments.map((file, index) => {
+                        // Extract original filename from Cloudinary URL or local path
+                        let displayName = 'File';
+                        if (file.includes('submission-')) {
+                          // Cloudinary format: ...submission-xxx-xxx-timestamp-originalname.ext
+                          const parts = file.split('-');
+                          if (parts.length >= 4) {
+                            // Get everything after the last timestamp
+                            const afterTimestamp = parts.slice(3).join('-');
+                            displayName = afterTimestamp.split('/').pop().split('?')[0];
+                          }
+                        } else {
+                          displayName = file.split('/').pop().split('?')[0];
+                        }
+                        
+                        // Truncate if still too long (max 30 chars)
+                        if (displayName.length > 30) {
+                          const ext = displayName.split('.').pop();
+                          displayName = displayName.substring(0, 20) + '...' + ext;
+                        }
+                        
+                        return (
                       <Chip
                         key={index}
                         icon={<Download />}
-                        label={file.split('/').pop()} // Show filename only
+                        label={displayName}
+                        title={file.split('/').pop()} // Full name on hover
                         size="small"
                           sx={{ mr: 1, mb: 0.5 }}
                             onClick={() => {
-                            // Open file in new tab - use backend URL
+                            // Handle file viewing/preview
+                            let fileUrl = file.trim();
+                            
+                            if (fileUrl.startsWith('http')) {
+                              // Cloudinary URL - check if Office file, use Google Viewer
+                              const ext = fileUrl.split('.').pop().toLowerCase().split('?')[0];
+                              if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                                const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+                                window.open(viewerUrl, '_blank');
+                              } else {
+                                window.open(fileUrl, '_blank');
+                              }
+                              return;
+                            }
+                            
+                            // Fix local file path - handle various formats
+                            let filePath = fileUrl.replace(/\/$/, '');
+                            
+                            if (!filePath.startsWith('/uploads/') && !filePath.startsWith('http')) {
+                              // Extract just the filename part
+                              filePath = filePath.replace(/^.*?(files-|file-|avatar-|attachments-|submission-)/, '$1');
+                              filePath = `/uploads/${filePath}`;
+                            }
+                            
                             const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
-                              window.open(`${backendUrl}${file}`, '_blank');
+                            const fullUrl = `${backendUrl}${filePath}`;
+                            
+                            // Check file extension for preview options
+                            const ext = filePath.split('.').pop().toLowerCase();
+                            
+                            // For PDFs and images, open directly (browser will preview)
+                            if (['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt'].includes(ext)) {
+                              window.open(fullUrl, '_blank');
+                            }
+                            // For Office files, use Google Docs Viewer
+                            else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                              const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fullUrl)}&embedded=true`;
+                              window.open(viewerUrl, '_blank');
+                            }
+                            // Other files, open directly (may download)
+                            else {
+                              window.open(fullUrl, '_blank');
+                            }
                                }}
                                clickable
                              />
-                           ))
+                        );
+                      })
                          ) : (
                            <Typography variant="body2" color="text.secondary">
                              Không có file
@@ -1127,15 +1235,83 @@ const TeacherAssignments = () => {
                       </TableCell>
                       <TableCell>{formatDateTime(submission.submittedAt)}</TableCell>
                       <TableCell>
-                        {submission.attachments.map((file, index) => (
+                        {submission.attachments.map((file, index) => {
+                          // Extract original filename
+                          let displayName = 'File';
+                          if (file.includes('submission-')) {
+                            const parts = file.split('-');
+                            if (parts.length >= 4) {
+                              const afterTimestamp = parts.slice(3).join('-');
+                              displayName = afterTimestamp.split('/').pop().split('?')[0];
+                            }
+                          } else {
+                            displayName = file.split('/').pop().split('?')[0];
+                          }
+                          
+                          // Truncate if too long
+                          if (displayName.length > 30) {
+                            const ext = displayName.split('.').pop();
+                            displayName = displayName.substring(0, 20) + '...' + ext;
+                          }
+                          
+                          return (
                           <Chip
                             key={index}
                             icon={<Download />}
-                            label={file}
+                            label={displayName}
+                            title={file.split('/').pop()}
                             size="small"
-                            sx={{ mr: 1 }}
+                            sx={{ mr: 1, mb: 0.5 }}
+                            onClick={() => {
+                              // Handle file viewing/preview
+                              let fileUrl = file.trim();
+                              
+                              if (fileUrl.startsWith('http')) {
+                                // Cloudinary URL - For Office files, use Google Docs Viewer
+                                const ext = fileUrl.split('.').pop().toLowerCase().split('?')[0];
+                                if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                                  const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+                                  window.open(viewerUrl, '_blank');
+                                } else {
+                                  window.open(fileUrl, '_blank');
+                                }
+                                return;
+                              }
+                              
+                              // Fix local file path - handle various formats
+                              let filePath = fileUrl.replace(/\/$/, ''); // Remove trailing slash
+                              
+                              if (!filePath.startsWith('/uploads/') && !filePath.startsWith('http')) {
+                                // Extract just the filename part (remove any path prefix)
+                                // Handle formats like: "submission-xxx-xxx-timestamp-filename.ext"
+                                filePath = filePath.replace(/^.*?(files-|file-|avatar-|attachments-|submission-)/, '$1');
+                                filePath = `/uploads/${filePath}`;
+                              }
+                              
+                              const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
+                              const fullUrl = `${backendUrl}${filePath}`;
+                              
+                              // Check file extension for preview options
+                              const ext = filePath.split('.').pop().toLowerCase();
+                              
+                              // For PDFs and images, open directly
+                              if (['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt'].includes(ext)) {
+                                window.open(fullUrl, '_blank');
+                              }
+                              // For Office files, use Google Docs Viewer
+                              else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                                const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fullUrl)}&embedded=true`;
+                                window.open(viewerUrl, '_blank');
+                              }
+                              // Other files, open directly
+                              else {
+                                window.open(fullUrl, '_blank');
+                              }
+                            }}
+                            clickable
                           />
-                        ))}
+                          );
+                        })}
                       </TableCell>
                       <TableCell>
                         {submission.grade ? (
@@ -1188,6 +1364,91 @@ const TeacherAssignments = () => {
             Chấm điểm {selectedItemForMenu?.isExam ? '(Kỳ thi)' : ''} - {selectedItemForMenu?.studentName}
           </DialogTitle>
           <DialogContent>
+            {/* File đính kèm */}
+            {selectedItemForMenu?.attachments && selectedItemForMenu.attachments.length > 0 && (
+              <Box sx={{ mb: 3, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                <Typography variant="subtitle2" gutterBottom>
+                  📎 File đính kèm ({selectedItemForMenu.attachments.length}):
+                </Typography>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 1 }}>
+                  {selectedItemForMenu.attachments.map((file, index) => {
+                    // Extract filename
+                    let displayName = 'File';
+                    if (file.includes('submission-')) {
+                      const parts = file.split('-');
+                      if (parts.length >= 4) {
+                        const afterTimestamp = parts.slice(3).join('-');
+                        displayName = afterTimestamp.split('/').pop().split('?')[0];
+                      }
+                    } else {
+                      displayName = file.split('/').pop().split('?')[0];
+                    }
+                    
+                    if (displayName.length > 35) {
+                      const ext = displayName.split('.').pop();
+                      displayName = displayName.substring(0, 25) + '...' + ext;
+                    }
+                    
+                    return (
+                      <Chip
+                        key={index}
+                        icon={<Download />}
+                        label={displayName}
+                        title={file.split('/').pop()}
+                        size="small"
+                        color="primary"
+                        variant="outlined"
+                        onClick={() => {
+                          let fileUrl = file.trim();
+                          
+                          if (fileUrl.startsWith('http')) {
+                            const ext = fileUrl.split('.').pop().toLowerCase().split('?')[0];
+                            if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                              const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+                              window.open(viewerUrl, '_blank');
+                            } else {
+                              window.open(fileUrl, '_blank');
+                            }
+                            return;
+                          }
+                          
+                          let filePath = fileUrl.replace(/\/$/, '');
+                          
+                          if (!filePath.startsWith('/uploads/') && !filePath.startsWith('http')) {
+                            filePath = filePath.replace(/^.*?(files-|file-|avatar-|attachments-|submission-)/, '$1');
+                            filePath = `/uploads/${filePath}`;
+                          }
+                          
+                          const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
+                          const fullUrl = `${backendUrl}${filePath}`;
+                          const ext = filePath.split('.').pop().toLowerCase();
+                          
+                          if (['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt'].includes(ext)) {
+                            window.open(fullUrl, '_blank');
+                          } else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                            const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fullUrl)}&embedded=true`;
+                            window.open(viewerUrl, '_blank');
+                          } else {
+                            window.open(fullUrl, '_blank');
+                          }
+                        }}
+                        clickable
+                      />
+                    );
+                  })}
+                </Box>
+              </Box>
+            )}
+            
+            {/* Thời gian nộp */}
+            {selectedItemForMenu?.submittedAt && (
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" color="text.secondary">
+                  Nộp lúc: {new Date(selectedItemForMenu.submittedAt).toLocaleString('vi-VN')}
+                </Typography>
+              </Box>
+            )}
+            
             <Box sx={{ mb: 2 }}>
               <Typography variant="body2" color="text.secondary" gutterBottom>
                 Điểm số (0-10):

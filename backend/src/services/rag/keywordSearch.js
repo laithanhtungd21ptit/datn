@@ -88,6 +88,12 @@ export async function searchChunksByKeywords({ keywords, filters = {}, topK = 10
   if (filters.sourceIds?.length) {
     query.sourceId = { $in: filters.sourceIds.map(id => typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id) };
   }
+  // Support studentId filter for personal queries
+  if (filters.studentId) {
+    query['metadata.studentId'] = typeof filters.studentId === 'string' 
+      ? new mongoose.Types.ObjectId(filters.studentId) 
+      : filters.studentId;
+  }
   
   // Try MongoDB text search first (if text index exists)
   // Note: Text index may not exist if language 'vi' is not supported

@@ -2,7 +2,8 @@ import { retrieveRelevant } from './retriever.js';
 import { generateAnswer } from './generator.js';
 
 export async function answerQuestion({ question, filters, topK = 12, conversationHistory = [] }) {
-  const { results } = await retrieveRelevant({ question, filters, topK });
+  // Retrieve relevant chunks with enhanced processing
+  const { results, queryAnalysis } = await retrieveRelevant({ question, filters, topK });
 
   // Map results with full metadata
   const sources = results.map((r) => ({
@@ -16,21 +17,14 @@ export async function answerQuestion({ question, filters, topK = 12, conversatio
     metadata: r.metadata || {},
   }));
 
-  // Build context with structured format
-  const context = sources
-    .map((s, idx) => {
-      const metaParts = [];
-      if (s.metadata.dueDate) metaParts.push(`Hạn: ${new Date(s.metadata.dueDate).toLocaleString('vi-VN')}`);
-      if (s.metadata.isExam !== undefined) metaParts.push(s.metadata.isExam ? 'Kỳ thi' : 'Bài tập');
-      if (s.metadata.className) metaParts.push(`Lớp: ${s.metadata.className}`);
-      if (s.metadata.teacherName) metaParts.push(`GV: ${s.metadata.teacherName}`);
-      
-      const metaStr = metaParts.length > 0 ? `[${metaParts.join(', ')}]` : '';
-      return `[${s.docType}] ${s.title} ${metaStr}\n${s.text}`;
-    })
-    .join('\n\n---\n\n');
-
-  const answer = await generateAnswer({ question, context, sources, conversationHistory });
+  // Generate answer with query analysis context
+  const answer = await generateAnswer({ 
+    question, 
+    context: '', // Not used anymore, sources passed directly
+    sources, 
+    conversationHistory,
+    queryAnalysis  // Pass query understanding to generator
+  });
 
   return { answer, sources };
 }

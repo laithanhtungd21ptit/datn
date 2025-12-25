@@ -653,7 +653,30 @@ if (!assignment) return res.status(404).json({ error: 'NOT_FOUND' });
 const owns = await ClassModel.exists({ _id: assignment.classId, teacherId });
 if (!owns) return res.status(403).json({ error: 'FORBIDDEN' });
 
-  const fileUrls = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
+  // Upload files to Cloudinary or local storage
+  let fileUrls = [];
+  
+  if (req.files && req.files.length > 0) {
+    if (useCloudinary) {
+      try {
+        // Upload to Cloudinary
+        const uploadPromises = req.files.map(async (file) => {
+          const fileName = `assignment-${id}-${Date.now()}-${file.originalname}`;
+          const result = await uploadToCloudinary(file.buffer, fileName, 'datn2025/attachments');
+          return result.secure_url;
+        });
+        fileUrls = await Promise.all(uploadPromises);
+      } catch (error) {
+        console.error('Cloudinary upload failed:', error);
+        // Fallback to local storage if Cloudinary fails
+        fileUrls = req.files.map(file => `/uploads/${file.filename}`);
+      }
+    } else {
+      // Use local storage for development
+      fileUrls = req.files.map(file => `/uploads/${file.filename}`);
+    }
+  }
+  
   if (fileUrls.length === 0) return res.status(400).json({ error: 'NO_FILES_UPLOADED' });
 
   // Update assignment with attachment URLs

@@ -61,6 +61,25 @@ class SocketService {
       this.reconnectAttempts = 0;
       console.log('✅ Socket connected:', this.socket.id);
       
+      // Join user room to receive notifications
+      // Get userId from JWT token
+      try {
+        const token = localStorage.getItem('accessToken');
+        if (token) {
+          // Decode JWT to get user ID (simple base64 decode, no verification needed for client)
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          const userId = payload.id || payload.userId || payload.sub;
+          if (userId) {
+            this.socket.emit('join', userId);
+            console.log('✅ Joined user room:', userId);
+          } else {
+            console.warn('⚠️ No userId found in token');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to join user room:', error);
+      }
+      
       // Trigger custom callback if set
       if (this.listeners.has('onConnect')) {
         this.listeners.get('onConnect')();
@@ -506,12 +525,15 @@ class SocketService {
    */
   onNewNotification(callback) {
     if (!this.socket) {
-      console.warn('Socket not initialized, cannot listen for notifications');
+      console.warn('⚠️ Socket not initialized, cannot listen for notifications');
       return;
     }
 
+    console.log('📬 Setting up new_notification listener');
     this.socket.on('new_notification', (notification) => {
-      console.log('New notification received:', notification.title);
+      console.log('📬 New notification received:', notification.title);
+      console.log('📬 Notification type:', notification.type);
+      console.log('📬 Full notification:', notification);
       callback(notification);
     });
   }

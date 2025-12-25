@@ -29,7 +29,8 @@ export function normalizeNotificationSettings(settings = {}) {
 
 export function shouldDeliverNotification(settings = {}, type) {
   const normalized = normalizeNotificationSettings(settings);
-  if (normalized.emailNotifications === false) return false;
+  // Không kiểm tra emailNotifications nữa - đây là in-app notification, không phải email
+  // if (normalized.emailNotifications === false) return false;
   const prefKey = NOTIFICATION_TYPE_PREFERENCE[type];
   if (!prefKey) return true;
   return normalized[prefKey] !== false;

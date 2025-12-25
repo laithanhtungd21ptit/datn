@@ -663,21 +663,29 @@ res.json(logs);
 
 // ---- Send Notifications ----
 adminRouter.post('/send-notification', async (req, res) => {
+  console.log('📧 Received send-notification request');
+  console.log('📧 User:', req.user);
+  console.log('📧 Body:', req.body);
+  
   const { recipientId, title, content, type = 'general' } = req.body || {};
 
   if (!recipientId || !title || !content) {
+    console.log('❌ Missing fields:', { recipientId, title, content });
     return res.status(400).json({ error: 'MISSING_FIELDS' });
   }
 
   // Validate recipient exists
   const recipient = await UserModel.findById(recipientId).select('fullName notificationSettings').lean();
+  console.log('📧 Recipient found:', recipient?.fullName);
+  
   if (!recipient) {
+    console.log('❌ Recipient not found:', recipientId);
     return res.status(404).json({ error: 'RECIPIENT_NOT_FOUND' });
   }
 
-  if (!shouldDeliverNotification(recipient.notificationSettings, 'admin_notification')) {
-    return res.json({ success: true, message: 'Recipient has disabled system notifications' });
-  }
+  // Admin notifications ALWAYS go through, regardless of user settings
+  // This is because admin notifications are system-critical
+  console.log('✅ Will send admin notification to:', recipient.fullName);
 
   try {
     const { NotificationModel } = await import('../../models/Notification.js');
@@ -701,11 +709,17 @@ adminRouter.post('/send-notification', async (req, res) => {
       const notificationData = {
         ...notification.toObject(),
         senderId: { fullName: senderInfo?.fullName || 'Quản trị viên' },
-        classId: null
+        classId: { name: 'Hệ thống' } // Admin notifications show as "System" instead of null
       };
+      
+      console.log('📤 Emitting admin notification to user:', recipientId);
+      console.log('📤 Notification data:', JSON.stringify(notificationData, null, 2));
+      
       emitNotificationToUser(recipientId, notificationData);
+      
+      console.log('✅ Admin notification emitted successfully');
     } catch (socketError) {
-      console.error('Error emitting notification via Socket.IO:', socketError);
+      console.error('❌ Error emitting notification via Socket.IO:', socketError);
       // Don't fail the notification creation if Socket.IO fails
     }
 
@@ -726,9 +740,10 @@ adminRouter.post('/send-notification', async (req, res) => {
       // Don't fail the request if logging fails
     }
 
+    console.log('✅ Notification sent successfully to:', recipient.fullName);
     res.json({ success: true, message: 'Notification sent successfully' });
   } catch (error) {
-    console.error('Error sending notification:', error);
+    console.error('❌ Error sending notification:', error);
     res.status(500).json({ error: 'Failed to send notification', details: error.message });
   }
 });

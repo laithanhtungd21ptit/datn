@@ -33,23 +33,53 @@ ragRouter.post('/query', authRequired(['admin', 'teacher', 'student']), async (r
     const accessibleClassIds = await getAccessibleClassIds(req.user);
 
     // Determine class filters
-    let classIdsFilter = [];
+    let classIdsFilter = undefined;
     if (req.user.role === 'admin') {
-      if (classId) classIdsFilter = [classId];
-    } else {
-      classIdsFilter = accessibleClassIds;
-      if (classId && !accessibleClassIds.map(String).includes(String(classId))) {
-        return res.status(403).json({ error: 'FORBIDDEN_CLASS' });
+      // Admin: nếu chỉ định classId thì filter, không thì search all
+      classIdsFilter = classId ? [classId] : undefined;
+    } else if (req.user.role === 'teacher' || req.user.role === 'student') {
+      // Teacher/Student: search trong các class có quyền
+      if (accessibleClassIds && accessibleClassIds.length > 0) {
+        if (classId) {
+          // Nếu chỉ định classId, check permission
+          if (!accessibleClassIds.map(String).includes(String(classId))) {
+            return res.status(403).json({ error: 'FORBIDDEN_CLASS' });
+          }
+          classIdsFilter = [classId];
+        } else {
+          // Không chỉ định classId → search trong các class có quyền
+          classIdsFilter = accessibleClassIds;
+        }
+      } else {
+        // Không enroll class nào → vẫn cho search general info
+        classIdsFilter = undefined;
       }
-      if (classId) classIdsFilter = [classId];
     }
 
     const filters = {
       docType: Array.isArray(docTypes) && docTypes.length ? docTypes : undefined,
       classIds: classIdsFilter,
-      // Allow all roles to access all ingested data
       rolesAllowed: undefined,
     };
+
+    // Special handling cho submission - student chỉ xem của chính mình
+    const queryLower = query.toLowerCase();
+    const isPersonalQuery = queryLower.includes('của tôi') || 
+                            queryLower.includes('của mình') ||
+                            queryLower.includes('điểm tôi') ||
+                            queryLower.includes('bài tôi') ||
+                            queryLower.includes('tôi nộp') ||
+                            queryLower.includes('được chấm');
+
+    if (req.user.role === 'student' && isPersonalQuery) {
+      // Student query về bài nộp/điểm của mình
+      filters.studentId = req.user.id;
+      console.log('[RAG] Student personal query detected, filtering by studentId');
+    }
+
+    console.log('[RAG] User:', req.user.username, 'Role:', req.user.role);
+    console.log('[RAG] Query:', query);
+    console.log('[RAG] Filters:', JSON.stringify(filters, null, 2));
 
     // Get conversation history if conversationId provided
     let conversationHistory = [];

@@ -49,7 +49,7 @@ const TeacherDashboardScreen: React.FC = () => {
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.teacherDashboard?.();
+      const data = await api.teacherDashboard?.() as any;
       if (data?.stats) {
         setStats({
           classes: data.stats.classes,

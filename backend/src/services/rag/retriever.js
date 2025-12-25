@@ -2,6 +2,7 @@ import { embedText } from './embedder.js';
 import { searchChunks } from './vectorStore.js';
 import { searchChunksByKeywords, extractKeywordsFromQuery } from './keywordSearch.js';
 import { rerankResults } from './reranker.js';
+import { analyzeQuery, expandQueryWithSynonyms } from './queryProcessor.js';
 
 /**
  * Merge and deduplicate results by sourceId + chunkIndex
@@ -47,21 +48,31 @@ function mergeResults(semanticResults, keywordResults, semanticWeight = 0.7, key
 }
 
 /**
- * Hybrid retrieval: combines semantic (vector) and keyword search
+ * Hybrid retrieval: combines semantic (vector) and keyword search with query understanding
  */
 export async function retrieveRelevant({ question, filters, topK = 12 }) {
-  // Extract keywords from question
-  const keywords = extractKeywordsFromQuery(question);
+  // Analyze query to understand intent
+  const queryAnalysis = analyzeQuery(question);
+  console.log('[RAG Retriever] Query analysis:', JSON.stringify(queryAnalysis));
   
-  // Detect if query is about class/teacher (should prioritize Class chunks)
+  // Expand query with synonyms for better recall
+  const expandedQuery = expandQueryWithSynonyms(question);
+  
+  // Extract keywords from expanded query
+  const keywords = extractKeywordsFromQuery(expandedQuery);
+  
+  // Detect specific query types
   const questionLower = question.toLowerCase();
   const classKeywords = ['môn', 'môn học', 'lớp', 'ai dạy', 'giảng viên', 'giáo viên', 'gv', 'thầy', 'cô', 'do ai', 'được ai', 'dạy', 'phụ trách'];
-  const isClassQuery = classKeywords.some(kw => questionLower.includes(kw));
+  const isClassQuery = classKeywords.some(kw => questionLower.includes(kw)) || queryAnalysis.detectedIntents.includes('classInfo');
   const gradeKeywords = ['điểm', 'chấm điểm', 'đã chấm', 'lên điểm', 'điểm số', 'grade', 'điểm thi', 'điểm môn'];
-  const isGradeQuery = gradeKeywords.some(kw => questionLower.includes(kw));
+  const isGradeQuery = gradeKeywords.some(kw => questionLower.includes(kw)) || queryAnalysis.detectedIntents.includes('gradeInfo');
   
-  // Get embedding first
-  const embedding = await embedText(question);
+  // Get embedding for expanded query (better semantic matching)
+  const embedding = await embedText(expandedQuery);
+  
+  // Adjust topK based on query complexity
+  const adjustedTopK = queryAnalysis.isAmbiguous ? Math.ceil(topK * 1.5) : topK;
   
   // For class/teacher queries, also search without classIds filter to get Class chunks
   // Class chunks should be accessible even if user hasn't enrolled
@@ -69,22 +80,22 @@ export async function retrieveRelevant({ question, filters, topK = 12 }) {
   if (isClassQuery) {
     const classFilters = { ...filters, classIds: undefined, docType: ['class'] };
     const [classSemantic, classKeyword] = await Promise.all([
-      searchChunks({ embedding, filters: classFilters, topK: topK * 2 }),
+      searchChunks({ embedding, filters: classFilters, topK: adjustedTopK * 2 }),
       keywords.length > 0 
-        ? searchChunksByKeywords({ keywords, filters: classFilters, topK: topK * 2 })
+        ? searchChunksByKeywords({ keywords, filters: classFilters, topK: adjustedTopK * 2 })
         : Promise.resolve([]),
     ]);
-    classChunksResults = mergeResults(classSemantic, classKeyword, 0.6, 0.4);
+    classChunksResults = mergeResults(classSemantic, classKeyword, 0.65, 0.35);
   }
 
-  // For grade queries, relax docType to include potential grade/result docs
+  // For grade queries, focus on submission and assignment docs
   let gradeChunksResults = [];
   if (isGradeQuery) {
-    const gradeFilters = { ...filters, docType: undefined };
+    const gradeFilters = { ...filters, docType: ['submission', 'assignment'] };
     const [gradeSemantic, gradeKeyword] = await Promise.all([
-      searchChunks({ embedding, filters: gradeFilters, topK: topK * 2 }),
+      searchChunks({ embedding, filters: gradeFilters, topK: adjustedTopK * 2 }),
       keywords.length > 0
-        ? searchChunksByKeywords({ keywords, filters: gradeFilters, topK: topK * 2 })
+        ? searchChunksByKeywords({ keywords, filters: gradeFilters, topK: adjustedTopK * 2 })
         : Promise.resolve([]),
     ]);
     gradeChunksResults = mergeResults(gradeSemantic, gradeKeyword, 0.6, 0.4);
@@ -92,15 +103,14 @@ export async function retrieveRelevant({ question, filters, topK = 12 }) {
   
   // Run semantic and keyword search in parallel with original filters
   const [semanticResults, keywordResults] = await Promise.all([
-    searchChunks({ embedding, filters, topK: topK * 3 }),
+    searchChunks({ embedding, filters, topK: adjustedTopK * 3 }),
     keywords.length > 0 
-      ? searchChunksByKeywords({ keywords, filters, topK: topK * 3 })
+      ? searchChunksByKeywords({ keywords, filters, topK: adjustedTopK * 3 })
       : Promise.resolve([]),
   ]);
   
-  // Merge results with weighted scoring
-  // Semantic weight: 0.7, Keyword weight: 0.3
-  let mergedResults = mergeResults(semanticResults, keywordResults, 0.6, 0.4);
+  // Merge results with adjusted weights (slightly favor semantic for Vietnamese)
+  let mergedResults = mergeResults(semanticResults, keywordResults, 0.65, 0.35);
   
   // Add Class chunks if found (for class/teacher queries)
   if (classChunksResults.length > 0) {
@@ -109,7 +119,7 @@ export async function retrieveRelevant({ question, filters, topK = 12 }) {
       const key = `${r.sourceId}_${r.chunkIndex || 0}`;
       if (!seen.has(key)) {
         // Boost Class chunks score for class queries
-        r.combinedScore = (r.combinedScore || 0) * 1.2;
+        r.combinedScore = (r.combinedScore || 0) * 1.3;
         mergedResults.push(r);
         seen.add(key);
       }
@@ -122,58 +132,41 @@ export async function retrieveRelevant({ question, filters, topK = 12 }) {
     for (const r of gradeChunksResults) {
       const key = `${r.sourceId}_${r.chunkIndex || 0}`;
       if (!seen.has(key)) {
-        r.combinedScore = (r.combinedScore || 0) * 1.1;
+        r.combinedScore = (r.combinedScore || 0) * 1.2;
         mergedResults.push(r);
         seen.add(key);
       }
     }
   }
   
-  // If not enough results, try with relaxed filters
-  if (mergedResults.length < Math.min(topK, 5) && filters.classIds?.length) {
-    const relaxedFilters = { ...filters, classIds: undefined };
-    const [relaxedSemantic, relaxedKeyword] = await Promise.all([
-      searchChunks({ embedding, filters: relaxedFilters, topK: topK * 3 }),
-      keywords.length > 0 
-        ? searchChunksByKeywords({ keywords, filters: relaxedFilters, topK: topK * 3 })
-        : Promise.resolve([]),
-    ]);
+  // Fallback strategies for low recall
+  if (mergedResults.length < Math.min(topK, 5)) {
+    console.log('[RAG] Low recall, applying relaxed filters');
     
-    const relaxedMerged = mergeResults(relaxedSemantic, relaxedKeyword, 0.6, 0.4);
-    const seen = new Set(mergedResults.map(r => `${r.sourceId}_${r.chunkIndex || 0}`));
-    
-    for (const r of relaxedMerged) {
-      const key = `${r.sourceId}_${r.chunkIndex || 0}`;
-      if (!seen.has(key) && mergedResults.length < topK * 2) {
-        mergedResults.push(r);
-        seen.add(key);
+    // Try without classIds filter
+    if (filters.classIds?.length) {
+      const relaxedFilters = { ...filters, classIds: undefined };
+      const [relaxedSemantic, relaxedKeyword] = await Promise.all([
+        searchChunks({ embedding, filters: relaxedFilters, topK: adjustedTopK * 3 }),
+        keywords.length > 0 
+          ? searchChunksByKeywords({ keywords, filters: relaxedFilters, topK: adjustedTopK * 3 })
+          : Promise.resolve([]),
+      ]);
+      
+      const relaxedMerged = mergeResults(relaxedSemantic, relaxedKeyword, 0.65, 0.35);
+      const seen = new Set(mergedResults.map(r => `${r.sourceId}_${r.chunkIndex || 0}`));
+      
+      for (const r of relaxedMerged) {
+        const key = `${r.sourceId}_${r.chunkIndex || 0}`;
+        if (!seen.has(key) && mergedResults.length < topK * 2) {
+          mergedResults.push(r);
+          seen.add(key);
+        }
       }
     }
   }
   
-  // If still not enough, try without docType filter
-  if (mergedResults.length < Math.min(topK, 5) && filters.docType?.length) {
-    const relaxedFilters = { ...filters, docType: undefined };
-    const [relaxedSemantic, relaxedKeyword] = await Promise.all([
-      searchChunks({ embedding, filters: relaxedFilters, topK: topK * 3 }),
-      keywords.length > 0 
-        ? searchChunksByKeywords({ keywords, filters: relaxedFilters, topK: topK * 3 })
-        : Promise.resolve([]),
-    ]);
-    
-    const relaxedMerged = mergeResults(relaxedSemantic, relaxedKeyword, 0.6, 0.4);
-    const seen = new Set(mergedResults.map(r => `${r.sourceId}_${r.chunkIndex || 0}`));
-    
-    for (const r of relaxedMerged) {
-      const key = `${r.sourceId}_${r.chunkIndex || 0}`;
-      if (!seen.has(key) && mergedResults.length < topK * 2) {
-        mergedResults.push(r);
-        seen.add(key);
-      }
-    }
-  }
-  
-  // Initial sort by combined score
+  // Sort by combined score
   let results = mergedResults
     .sort((a, b) => (b.combinedScore || 0) - (a.combinedScore || 0))
     .slice(0, topK * 2) // Get more candidates for re-ranking
@@ -182,12 +175,15 @@ export async function retrieveRelevant({ question, filters, topK = 12 }) {
       score: r.combinedScore || r.semanticScore || r.keywordScore || 0,
     }));
   
-  // Apply lightweight re-ranking
+  // Apply intelligent re-ranking
   results = rerankResults(question, results, topK);
+  
+  console.log(`[RAG] Retrieved ${results.length} results (top score: ${results[0]?.score.toFixed(3) || 'N/A'})`);
   
   return {
     embedding,
     results,
+    queryAnalysis, // Return analysis for downstream use
   };
 }
 

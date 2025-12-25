@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { RouteProp, useRoute, useFocusEffect } from '@react-navigation/native';
 import * as DocumentPicker from 'expo-document-picker';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '../../api/client';
 import { colors } from '../../theme/colors';
 import { BACKEND_URL } from '../../config/constants';
@@ -117,6 +118,14 @@ const TeacherClassDetailScreen: React.FC = () => {
   const [showDocumentModal, setShowDocumentModal] = useState(false);
   const [showNotificationModal, setShowNotificationModal] = useState(false);
   const [showRemoveStudentModal, setShowRemoveStudentModal] = useState(false);
+  
+  // DateTimePicker states
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [showDueTimePicker, setShowDueTimePicker] = useState(false);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [tempDueDate, setTempDueDate] = useState<Date>(new Date());
+  const [tempStartDate, setTempStartDate] = useState<Date>(new Date());
 
   // Forms
   const [assignmentForm, setAssignmentForm] = useState({
@@ -947,22 +956,114 @@ const TeacherClassDetailScreen: React.FC = () => {
                   />
                 </View>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Hạn nộp * (YYYY-MM-DD HH:mm:ss)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ví dụ: 2025-06-01 23:59:59"
-                    value={assignmentForm.dueDate}
-                    onChangeText={value => setAssignmentForm(prev => ({ ...prev, dueDate: value }))}
-                  />
+                  <Text style={styles.inputLabel}>Hạn nộp *</Text>
+                  <TouchableOpacity
+                    style={[styles.input, styles.datePickerButton]}
+                    onPress={() => {
+                      const date = assignmentForm.dueDate ? new Date(assignmentForm.dueDate) : new Date();
+                      setTempDueDate(date);
+                      setShowDueDatePicker(true);
+                    }}
+                  >
+                    <Text style={assignmentForm.dueDate ? styles.datePickerText : styles.datePickerPlaceholder}>
+                      {assignmentForm.dueDate || 'Chọn ngày giờ hạn nộp'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showDueDatePicker && (
+                    <DateTimePicker
+                      value={tempDueDate}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        if (Platform.OS === 'android') {
+                          setShowDueDatePicker(false);
+                        }
+                        if (event.type === 'set' && selectedDate) {
+                          setTempDueDate(selectedDate);
+                          if (Platform.OS === 'android') {
+                            setShowDueTimePicker(true);
+                          } else {
+                            setShowDueDatePicker(false);
+                            setShowDueTimePicker(true);
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                  {showDueTimePicker && (
+                    <DateTimePicker
+                      value={tempDueDate}
+                      mode="time"
+                      display="default"
+                      onChange={(event, selectedTime) => {
+                        setShowDueTimePicker(false);
+                        if (event.type === 'set' && selectedTime) {
+                          const year = tempDueDate.getFullYear();
+                          const month = String(tempDueDate.getMonth() + 1).padStart(2, '0');
+                          const day = String(tempDueDate.getDate()).padStart(2, '0');
+                          const hours = String(selectedTime.getHours()).padStart(2, '0');
+                          const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
+                          const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:00`;
+                          setAssignmentForm(prev => ({ ...prev, dueDate: formattedDate }));
+                        }
+                      }}
+                    />
+                  )}
                 </View>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Thời gian bắt đầu (YYYY-MM-DD HH:mm:ss)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ví dụ: 2025-05-30 08:00:00"
-                    value={assignmentForm.startAt}
-                    onChangeText={value => setAssignmentForm(prev => ({ ...prev, startAt: value }))}
-                  />
+                  <Text style={styles.inputLabel}>Thời gian bắt đầu (tùy chọn)</Text>
+                  <TouchableOpacity
+                    style={[styles.input, styles.datePickerButton]}
+                    onPress={() => {
+                      const date = assignmentForm.startAt ? new Date(assignmentForm.startAt) : new Date();
+                      setTempStartDate(date);
+                      setShowStartDatePicker(true);
+                    }}
+                  >
+                    <Text style={assignmentForm.startAt ? styles.datePickerText : styles.datePickerPlaceholder}>
+                      {assignmentForm.startAt || 'Chọn ngày giờ bắt đầu'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showStartDatePicker && (
+                    <DateTimePicker
+                      value={tempStartDate}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        if (Platform.OS === 'android') {
+                          setShowStartDatePicker(false);
+                        }
+                        if (event.type === 'set' && selectedDate) {
+                          setTempStartDate(selectedDate);
+                          if (Platform.OS === 'android') {
+                            setShowStartTimePicker(true);
+                          } else {
+                            setShowStartDatePicker(false);
+                            setShowStartTimePicker(true);
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                  {showStartTimePicker && (
+                    <DateTimePicker
+                      value={tempStartDate}
+                      mode="time"
+                      display="default"
+                      onChange={(event, selectedTime) => {
+                        setShowStartTimePicker(false);
+                        if (event.type === 'set' && selectedTime) {
+                          const year = tempStartDate.getFullYear();
+                          const month = String(tempStartDate.getMonth() + 1).padStart(2, '0');
+                          const day = String(tempStartDate.getDate()).padStart(2, '0');
+                          const hours = String(selectedTime.getHours()).padStart(2, '0');
+                          const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
+                          const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:00`;
+                          setAssignmentForm(prev => ({ ...prev, startAt: formattedDate }));
+                        }
+                      }}
+                    />
+                  )}
                 </View>
                 <View style={styles.inputGroup}>
                   <View style={styles.checkboxRow}>
@@ -1068,22 +1169,114 @@ const TeacherClassDetailScreen: React.FC = () => {
                   />
                 </View>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Hạn nộp * (YYYY-MM-DD HH:mm:ss)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ví dụ: 2025-06-01 23:59:59"
-                    value={assignmentForm.dueDate}
-                    onChangeText={value => setAssignmentForm(prev => ({ ...prev, dueDate: value }))}
-                  />
+                  <Text style={styles.inputLabel}>Hạn nộp *</Text>
+                  <TouchableOpacity
+                    style={[styles.input, styles.datePickerButton]}
+                    onPress={() => {
+                      const date = assignmentForm.dueDate ? new Date(assignmentForm.dueDate) : new Date();
+                      setTempDueDate(date);
+                      setShowDueDatePicker(true);
+                    }}
+                  >
+                    <Text style={assignmentForm.dueDate ? styles.datePickerText : styles.datePickerPlaceholder}>
+                      {assignmentForm.dueDate || 'Chọn ngày giờ hạn nộp'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showDueDatePicker && (
+                    <DateTimePicker
+                      value={tempDueDate}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        if (Platform.OS === 'android') {
+                          setShowDueDatePicker(false);
+                        }
+                        if (event.type === 'set' && selectedDate) {
+                          setTempDueDate(selectedDate);
+                          if (Platform.OS === 'android') {
+                            setShowDueTimePicker(true);
+                          } else {
+                            setShowDueDatePicker(false);
+                            setShowDueTimePicker(true);
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                  {showDueTimePicker && (
+                    <DateTimePicker
+                      value={tempDueDate}
+                      mode="time"
+                      display="default"
+                      onChange={(event, selectedTime) => {
+                        setShowDueTimePicker(false);
+                        if (event.type === 'set' && selectedTime) {
+                          const year = tempDueDate.getFullYear();
+                          const month = String(tempDueDate.getMonth() + 1).padStart(2, '0');
+                          const day = String(tempDueDate.getDate()).padStart(2, '0');
+                          const hours = String(selectedTime.getHours()).padStart(2, '0');
+                          const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
+                          const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:00`;
+                          setAssignmentForm(prev => ({ ...prev, dueDate: formattedDate }));
+                        }
+                      }}
+                    />
+                  )}
                 </View>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Thời gian bắt đầu (YYYY-MM-DD HH:mm:ss)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ví dụ: 2025-05-30 08:00:00"
-                    value={assignmentForm.startAt}
-                    onChangeText={value => setAssignmentForm(prev => ({ ...prev, startAt: value }))}
-                  />
+                  <Text style={styles.inputLabel}>Thời gian bắt đầu (tùy chọn)</Text>
+                  <TouchableOpacity
+                    style={[styles.input, styles.datePickerButton]}
+                    onPress={() => {
+                      const date = assignmentForm.startAt ? new Date(assignmentForm.startAt) : new Date();
+                      setTempStartDate(date);
+                      setShowStartDatePicker(true);
+                    }}
+                  >
+                    <Text style={assignmentForm.startAt ? styles.datePickerText : styles.datePickerPlaceholder}>
+                      {assignmentForm.startAt || 'Chọn ngày giờ bắt đầu'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showStartDatePicker && (
+                    <DateTimePicker
+                      value={tempStartDate}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        if (Platform.OS === 'android') {
+                          setShowStartDatePicker(false);
+                        }
+                        if (event.type === 'set' && selectedDate) {
+                          setTempStartDate(selectedDate);
+                          if (Platform.OS === 'android') {
+                            setShowStartTimePicker(true);
+                          } else {
+                            setShowStartDatePicker(false);
+                            setShowStartTimePicker(true);
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                  {showStartTimePicker && (
+                    <DateTimePicker
+                      value={tempStartDate}
+                      mode="time"
+                      display="default"
+                      onChange={(event, selectedTime) => {
+                        setShowStartTimePicker(false);
+                        if (event.type === 'set' && selectedTime) {
+                          const year = tempStartDate.getFullYear();
+                          const month = String(tempStartDate.getMonth() + 1).padStart(2, '0');
+                          const day = String(tempStartDate.getDate()).padStart(2, '0');
+                          const hours = String(selectedTime.getHours()).padStart(2, '0');
+                          const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
+                          const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:00`;
+                          setAssignmentForm(prev => ({ ...prev, startAt: formattedDate }));
+                        }
+                      }}
+                    />
+                  )}
                 </View>
                 <View style={styles.inputGroup}>
                   <View style={styles.checkboxRow}>
@@ -1190,22 +1383,58 @@ const TeacherClassDetailScreen: React.FC = () => {
                     {submission.files && submission.files.length > 0 && (
                       <View style={styles.submissionFiles}>
                         <Text style={styles.submissionFilesLabel}>File đính kèm:</Text>
-                        {submission.files.map((file, idx) => (
+                        {submission.files.map((file, idx) => {
+                          // Extract filename for display
+                          let displayName = 'File';
+                          if (file.includes('submission-')) {
+                            const parts = file.split('-');
+                            if (parts.length >= 4) {
+                              const afterTimestamp = parts.slice(3).join('-');
+                              displayName = afterTimestamp.split('/').pop()?.split('?')[0] || 'File';
+                            }
+                          } else {
+                            displayName = file.split('/').pop()?.split('?')[0] || 'File';
+                          }
+                          
+                          if (displayName.length > 30) {
+                            const ext = displayName.split('.').pop() || '';
+                            displayName = displayName.substring(0, 20) + '...' + ext;
+                          }
+                          
+                          return (
                           <TouchableOpacity
                             key={idx}
                             style={styles.fileLink}
                             onPress={() => {
-                              const url = file.startsWith('http')
-                                ? file
-                                : `${BACKEND_URL}${file}`;
+                              let fileUrl = file.trim();
+                              
+                              if (fileUrl.startsWith('http')) {
+                                // Cloudinary URL - use directly
+                                Linking.openURL(fileUrl).catch(err =>
+                                  Alert.alert('Lỗi', 'Không thể mở file: ' + err.message)
+                                );
+                                return;
+                              }
+                              
+                              // Fix local file path
+                              let filePath = fileUrl.replace(/\/$/, '');
+                              
+                              if (!filePath.startsWith('/uploads/') && !filePath.startsWith('http')) {
+                                // Extract filename part
+                                filePath = filePath.replace(/^.*?(files-|file-|avatar-|attachments-|submission-)/, '$1');
+                                filePath = `/uploads/${filePath}`;
+                              }
+                              
+                              const url = `${BACKEND_URL}${filePath}`;
                               Linking.openURL(url).catch(err =>
-                                console.warn('Không thể mở file:', err),
+                                Alert.alert('Lỗi', 'Không thể mở file: ' + err.message)
                               );
                             }}
                           >
-                            <Text style={styles.fileLinkText}>📎 File {idx + 1}</Text>
+                            <Text style={styles.fileLinkText}>📎 {displayName}</Text>
                           </TouchableOpacity>
-                        ))}
+                          );
+                        })}
                       </View>
                     )}
                     {submission.notes && (
@@ -1254,23 +1483,80 @@ const TeacherClassDetailScreen: React.FC = () => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>
-              Chấm điểm: {selectedSubmission?.studentName}
-            </Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Điểm số *"
-              keyboardType="numeric"
-              value={gradingData.grade}
-              onChangeText={value => setGradingData(prev => ({ ...prev, grade: value }))}
-            />
-            <TextInput
-              style={[styles.input, { height: 100 }]}
-              placeholder="Nhận xét (tùy chọn)"
-              multiline
-              value={gradingData.comment}
-              onChangeText={value => setGradingData(prev => ({ ...prev, comment: value }))}
-            />
+            <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 500 }}>
+              <Text style={styles.modalTitle}>
+                Chấm điểm: {selectedSubmission?.studentName}
+              </Text>
+              
+              {/* Hiển thị file nộp */}
+              {selectedSubmission?.files && selectedSubmission.files.length > 0 && (
+                <View style={styles.submissionFiles}>
+                  <Text style={styles.submissionFilesLabel}>📎 File đính kèm:</Text>
+                  {selectedSubmission.files.map((file, idx) => {
+                    let displayName = 'File';
+                    if (file.includes('submission-')) {
+                      const parts = file.split('-');
+                      if (parts.length >= 4) {
+                        const afterTimestamp = parts.slice(3).join('-');
+                        displayName = afterTimestamp.split('/').pop()?.split('?')[0] || 'File';
+                      }
+                    } else {
+                      displayName = file.split('/').pop()?.split('?')[0] || 'File';
+                    }
+                    
+                    if (displayName.length > 30) {
+                      const ext = displayName.split('.').pop() || '';
+                      displayName = displayName.substring(0, 20) + '...' + ext;
+                    }
+                    
+                    return (
+                      <TouchableOpacity
+                        key={idx}
+                        style={styles.fileLink}
+                        onPress={() => {
+                          let fileUrl = file.trim();
+                          
+                          if (!fileUrl.startsWith('http')) {
+                            fileUrl = fileUrl.replace(/\/$/, '');
+                            fileUrl = fileUrl.replace(/^.*?(files-|file-|avatar-|attachments-|submission-)/, '$1');
+                            fileUrl = fileUrl.startsWith('/') ? fileUrl : `/uploads/${fileUrl}`;
+                            fileUrl = `${BACKEND_URL}${fileUrl}`;
+                          }
+                          
+                          Linking.openURL(fileUrl).catch(err =>
+                            Alert.alert('Lỗi', `Không thể mở file: ${err.message || 'Định dạng không hỗ trợ hoặc lỗi đường dẫn.'}`),
+                          );
+                        }}
+                      >
+                        <Text style={styles.fileLinkText}>{displayName}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
+
+              {selectedSubmission?.notes && (
+                <View style={styles.submissionNotes}>
+                  <Text style={styles.submissionNotesLabel}>📝 Ghi chú của sinh viên:</Text>
+                  <Text style={styles.submissionNotesText}>{selectedSubmission.notes}</Text>
+                </View>
+              )}
+              
+              <TextInput
+                style={styles.input}
+                placeholder="Điểm số *"
+                keyboardType="numeric"
+                value={gradingData.grade}
+                onChangeText={value => setGradingData(prev => ({ ...prev, grade: value }))}
+              />
+              <TextInput
+                style={[styles.input, { height: 100 }]}
+                placeholder="Nhận xét (tùy chọn)"
+                multiline
+                value={gradingData.comment}
+                onChangeText={value => setGradingData(prev => ({ ...prev, comment: value }))}
+              />
+            </ScrollView>
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={styles.modalCancel}
@@ -1770,6 +2056,17 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background,
     fontSize: 15,
   },
+  datePickerButton: {
+    justifyContent: 'center',
+  },
+  datePickerText: {
+    fontSize: 15,
+    color: colors.secondary,
+  },
+  datePickerPlaceholder: {
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
   checkboxRow: {
     marginBottom: 12,
   },
@@ -1927,10 +2224,24 @@ const styles = StyleSheet.create({
     color: colors.primary,
   },
   submissionNotes: {
+    backgroundColor: '#f0f8ff',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  submissionNotesLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    marginBottom: 6,
+  },
+  submissionNotesText: {
     fontSize: 13,
     color: colors.textSecondary,
     fontStyle: 'italic',
-    marginTop: 4,
+    lineHeight: 20,
   },
   gradeButton: {
     marginTop: 8,

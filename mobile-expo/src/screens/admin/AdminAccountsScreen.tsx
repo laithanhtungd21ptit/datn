@@ -19,7 +19,7 @@ type Account = {
   fullName: string;
   email?: string;
   role: 'student' | 'teacher' | 'admin';
-  status?: 'active' | 'inactive';
+  status?: 'active' | 'inactive' | 'disabled';
   username?: string;
   phone?: string;
   department?: string;

@@ -38,6 +38,12 @@ export async function searchChunks({ embedding, filters = {}, topK = 5, limit = 
       if (filters.sourceIds?.length) {
         vectorFilter.sourceId = { $in: filters.sourceIds.map(id => typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id) };
       }
+      // Support studentId filter for personal queries
+      if (filters.studentId) {
+        vectorFilter['metadata.studentId'] = typeof filters.studentId === 'string' 
+          ? new mongoose.Types.ObjectId(filters.studentId) 
+          : filters.studentId;
+      }
 
       const pipeline = [
         {
@@ -91,6 +97,12 @@ export async function searchChunks({ embedding, filters = {}, topK = 5, limit = 
   if (filters.rolesAllowed?.length) query.rolesAllowed = { $in: filters.rolesAllowed };
   if (filters.sourceIds?.length) {
     query.sourceId = { $in: filters.sourceIds.map(id => typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id) };
+  }
+  // Support studentId filter for personal queries
+  if (filters.studentId) {
+    query['metadata.studentId'] = typeof filters.studentId === 'string' 
+      ? new mongoose.Types.ObjectId(filters.studentId) 
+      : filters.studentId;
   }
 
   // Increase limit for better recall when using cosine similarity

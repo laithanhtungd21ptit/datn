@@ -595,8 +595,37 @@ studentRouter.post('/submissions', upload.array('files', 5), async (req, res) =>
     }
   }
 
-  // Get uploaded file paths
-  const fileUrls = req.files ? req.files.map(file => `/uploads/${file.filename}`) : [];
+  // Upload files to Cloudinary or local storage
+  let fileUrls = [];
+  
+  if (req.files && req.files.length > 0) {
+    console.log(`📤 Upload mode: ${useCloudinary ? 'Cloudinary' : 'Local'}, files: ${req.files.length}`);
+    
+    if (useCloudinary) {
+      try {
+        // Upload to Cloudinary
+        console.log('⬆️  Uploading to Cloudinary...');
+        const uploadPromises = req.files.map(async (file) => {
+          const fileName = `submission-${assignmentId}-${studentId}-${Date.now()}-${file.originalname}`;
+          const result = await uploadToCloudinary(file.buffer, fileName, 'datn2025/submissions');
+          console.log(`✅ Cloudinary URL: ${result.secure_url}`);
+          return result.secure_url;
+        });
+        fileUrls = await Promise.all(uploadPromises);
+      } catch (error) {
+        console.error('❌ Cloudinary upload failed:', error.message || error);
+        // Fallback to local storage if Cloudinary fails
+        fileUrls = req.files.map(file => `/uploads/${file.filename}`);
+        console.log(`📁 Fallback to local: ${fileUrls.join(', ')}`);
+      }
+    } else {
+      // Use local storage for development
+      fileUrls = req.files.map(file => `/uploads/${file.filename}`);
+      console.log(`📁 Local storage: ${fileUrls.join(', ')}`);
+    }
+    
+    console.log(`💾 Saving to DB: ${fileUrls.join(';')}`);
+  }
 
   const submission = await SubmissionModel.findOneAndUpdate(
     { assignmentId, studentId },

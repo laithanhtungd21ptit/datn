@@ -1252,22 +1252,58 @@ const TeacherClassesScreen: React.FC = () => {
                     {submission.files && submission.files.length > 0 && (
                       <View style={styles.submissionFiles}>
                         <Text style={styles.submissionFilesLabel}>File đính kèm:</Text>
-                        {submission.files.map((file, idx) => (
+                        {submission.files.map((file, idx) => {
+                          // Extract filename for display
+                          let displayName = 'File';
+                          if (file.includes('submission-')) {
+                            const parts = file.split('-');
+                            if (parts.length >= 4) {
+                              const afterTimestamp = parts.slice(3).join('-');
+                              displayName = afterTimestamp.split('/').pop()?.split('?')[0] || 'File';
+                            }
+                          } else {
+                            displayName = file.split('/').pop()?.split('?')[0] || 'File';
+                          }
+                          
+                          if (displayName.length > 30) {
+                            const ext = displayName.split('.').pop() || '';
+                            displayName = displayName.substring(0, 20) + '...' + ext;
+                          }
+                          
+                          return (
                           <TouchableOpacity
                             key={idx}
                             style={styles.fileLink}
                             onPress={() => {
-                              const url = file.startsWith('http')
-                                ? file
-                                : `${BACKEND_URL}${file}`;
+                              let fileUrl = file.trim();
+                              
+                              if (fileUrl.startsWith('http')) {
+                                // Cloudinary URL - use directly
+                                Linking.openURL(fileUrl).catch(err =>
+                                  Alert.alert('Lỗi', 'Không thể mở file: ' + err.message)
+                                );
+                                return;
+                              }
+                              
+                              // Fix local file path
+                              let filePath = fileUrl.replace(/\/$/, '');
+                              
+                              if (!filePath.startsWith('/uploads/') && !filePath.startsWith('http')) {
+                                // Extract filename part
+                                filePath = filePath.replace(/^.*?(files-|file-|avatar-|attachments-|submission-)/, '$1');
+                                filePath = `/uploads/${filePath}`;
+                              }
+                              
+                              const url = `${BACKEND_URL}${filePath}`;
                               Linking.openURL(url).catch(err =>
-                                console.warn('Không thể mở file:', err),
+                                Alert.alert('Lỗi', 'Không thể mở file: ' + err.message)
                               );
                             }}
                           >
-                            <Text style={styles.fileLinkText}>📎 File {idx + 1}</Text>
+                            <Text style={styles.fileLinkText}>📎 {displayName}</Text>
                           </TouchableOpacity>
-                        ))}
+                          );
+                        })}
                       </View>
                     )}
                     {submission.notes && (

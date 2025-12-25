@@ -13,7 +13,10 @@ import {
   View,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
+  Linking,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { api } from '../../api/client';
 import { colors } from '../../theme/colors';
 
@@ -39,6 +42,8 @@ type Submission = {
   submittedAt?: string;
   grade?: number;
   comment?: string;
+  notes?: string;
+  files?: string[];
   status: 'submitted' | 'graded';
 };
 
@@ -59,6 +64,15 @@ const TeacherAssignmentsScreen: React.FC = () => {
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [editingAssignment, setEditingAssignment] = useState<Assignment | null>(null);
+  const [showClassDropdown, setShowClassDropdown] = useState(false);
+  
+  // DateTimePicker states
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [showDueTimePicker, setShowDueTimePicker] = useState(false);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [tempDueDate, setTempDueDate] = useState<Date>(new Date());
+  const [tempStartDate, setTempStartDate] = useState<Date>(new Date());
   const [assignmentForm, setAssignmentForm] = useState({
     title: '',
     description: '',
@@ -120,18 +134,31 @@ const TeacherAssignmentsScreen: React.FC = () => {
   const loadSubmissions = async (assignmentId: string) => {
     try {
       const data = await api.teacherSubmissions?.(assignmentId);
+      console.log('📥 Raw submissions data:', data);
       if (Array.isArray(data)) {
-        setSubmissions(
-          data.map((item: any) => ({
+        const mapped = data.map((item: any) => {
+          // Backend có thể trả về 'files' (array) hoặc 'contentUrl' (string với ; separator)
+          let files: string[] = [];
+          if (item.files && Array.isArray(item.files)) {
+            files = item.files;
+          } else if (item.contentUrl) {
+            files = item.contentUrl.split(';').filter((f: string) => f.trim());
+          }
+          console.log('👤', item.studentName, '- files:', files);
+          return {
             id: item.id,
             studentName: item.studentName || '',
             studentId: item.studentId,
             submittedAt: item.submittedAt,
             grade: item.score,
             comment: item.notes,
+            notes: item.notes,
+            files: files,
             status: item.score != null ? 'graded' : 'submitted',
-          })),
-        );
+          };
+        });
+        console.log('✅ Mapped submissions:', mapped);
+        setSubmissions(mapped as Submission[]);
       }
     } catch (error) {
       console.warn('Không thể tải bài nộp:', error);
@@ -469,6 +496,10 @@ const TeacherAssignmentsScreen: React.FC = () => {
                 <TouchableOpacity
                   style={styles.gradeButton}
                   onPress={() => {
+                    console.log('🎯 Opening grading modal');
+                    console.log('📦 Selected submission:', item);
+                    console.log('📁 Files:', item.files);
+                    console.log('📝 Notes:', item.notes);
                     setSelectedSubmission(item);
                     setGradingForm({
                       grade: item.grade != null ? String(item.grade) : '',
@@ -542,7 +573,30 @@ const TeacherAssignmentsScreen: React.FC = () => {
                   <Text style={styles.inputLabel}>Lớp giao bài *</Text>
                   <TouchableOpacity
                     style={styles.filterDropdown}
-                    onPress={() => setShowAssignmentClassPicker(true)}
+                    onPress={() => {
+                      console.log('🔵 Opening class picker, classes:', classes.length);
+                      if (classes.length === 0) {
+                        Alert.alert('Thông báo', 'Chưa có lớp học nào');
+                        return;
+                      }
+                      
+                      // Show native ActionSheet
+                      const options = classes.map(c => ({
+                        text: c.name,
+                        onPress: () => {
+                          console.log('✅ Class selected:', c.name);
+                          setAssignmentForm(prev => ({ ...prev, classId: c.id }));
+                        }
+                      }));
+                      
+                      options.push({ text: 'Hủy', onPress: () => {} });
+                      
+                      Alert.alert(
+                        'Chọn lớp giao bài',
+                        'Chọn lớp học để giao bài tập',
+                        options as any
+                      );
+                    }}
                   >
                     <Text style={styles.filterDropdownText}>
                       {assignmentForm.classId
@@ -554,26 +608,114 @@ const TeacherAssignmentsScreen: React.FC = () => {
                   </TouchableOpacity>
                 </View>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Hạn nộp * (YYYY-MM-DD HH:mm:ss)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ví dụ: 2025-06-01 23:59:59"
-                    value={assignmentForm.dueDate}
-                    onChangeText={value =>
-                      setAssignmentForm(prev => ({ ...prev, dueDate: value }))
-                    }
-                  />
+                  <Text style={styles.inputLabel}>Hạn nộp *</Text>
+                  <TouchableOpacity
+                    style={[styles.input, styles.datePickerButton]}
+                    onPress={() => {
+                      const date = assignmentForm.dueDate ? new Date(assignmentForm.dueDate) : new Date();
+                      setTempDueDate(date);
+                      setShowDueDatePicker(true);
+                    }}
+                  >
+                    <Text style={assignmentForm.dueDate ? styles.datePickerText : styles.datePickerPlaceholder}>
+                      {assignmentForm.dueDate || 'Chọn ngày giờ hạn nộp'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showDueDatePicker && (
+                    <DateTimePicker
+                      value={tempDueDate}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        if (Platform.OS === 'android') {
+                          setShowDueDatePicker(false);
+                        }
+                        if (event.type === 'set' && selectedDate) {
+                          setTempDueDate(selectedDate);
+                          if (Platform.OS === 'android') {
+                            setShowDueTimePicker(true);
+                          } else {
+                            setShowDueDatePicker(false);
+                            setShowDueTimePicker(true);
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                  {showDueTimePicker && (
+                    <DateTimePicker
+                      value={tempDueDate}
+                      mode="time"
+                      display="default"
+                      onChange={(event, selectedTime) => {
+                        setShowDueTimePicker(false);
+                        if (event.type === 'set' && selectedTime) {
+                          const year = tempDueDate.getFullYear();
+                          const month = String(tempDueDate.getMonth() + 1).padStart(2, '0');
+                          const day = String(tempDueDate.getDate()).padStart(2, '0');
+                          const hours = String(selectedTime.getHours()).padStart(2, '0');
+                          const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
+                          const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:00`;
+                          setAssignmentForm(prev => ({ ...prev, dueDate: formattedDate }));
+                        }
+                      }}
+                    />
+                  )}
                 </View>
                 <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>Thời gian bắt đầu (YYYY-MM-DD HH:mm:ss)</Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="Ví dụ: 2025-05-30 08:00:00"
-                    value={assignmentForm.startAt}
-                    onChangeText={value =>
-                      setAssignmentForm(prev => ({ ...prev, startAt: value }))
-                    }
-                  />
+                  <Text style={styles.inputLabel}>Thời gian bắt đầu (tùy chọn)</Text>
+                  <TouchableOpacity
+                    style={[styles.input, styles.datePickerButton]}
+                    onPress={() => {
+                      const date = assignmentForm.startAt ? new Date(assignmentForm.startAt) : new Date();
+                      setTempStartDate(date);
+                      setShowStartDatePicker(true);
+                    }}
+                  >
+                    <Text style={assignmentForm.startAt ? styles.datePickerText : styles.datePickerPlaceholder}>
+                      {assignmentForm.startAt || 'Chọn ngày giờ bắt đầu'}
+                    </Text>
+                  </TouchableOpacity>
+                  {showStartDatePicker && (
+                    <DateTimePicker
+                      value={tempStartDate}
+                      mode="date"
+                      display="default"
+                      onChange={(event, selectedDate) => {
+                        if (Platform.OS === 'android') {
+                          setShowStartDatePicker(false);
+                        }
+                        if (event.type === 'set' && selectedDate) {
+                          setTempStartDate(selectedDate);
+                          if (Platform.OS === 'android') {
+                            setShowStartTimePicker(true);
+                          } else {
+                            setShowStartDatePicker(false);
+                            setShowStartTimePicker(true);
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                  {showStartTimePicker && (
+                    <DateTimePicker
+                      value={tempStartDate}
+                      mode="time"
+                      display="default"
+                      onChange={(event, selectedTime) => {
+                        setShowStartTimePicker(false);
+                        if (event.type === 'set' && selectedTime) {
+                          const year = tempStartDate.getFullYear();
+                          const month = String(tempStartDate.getMonth() + 1).padStart(2, '0');
+                          const day = String(tempStartDate.getDate()).padStart(2, '0');
+                          const hours = String(selectedTime.getHours()).padStart(2, '0');
+                          const minutes = String(selectedTime.getMinutes()).padStart(2, '0');
+                          const formattedDate = `${year}-${month}-${day} ${hours}:${minutes}:00`;
+                          setAssignmentForm(prev => ({ ...prev, startAt: formattedDate }));
+                        }
+                      }}
+                    />
+                  )}
                 </View>
                 <View style={styles.inputGroup}>
                   <View style={styles.checkboxRow}>
@@ -668,6 +810,63 @@ const TeacherAssignmentsScreen: React.FC = () => {
                     {selectedSubmission.studentId ? ` • MSSV: ${selectedSubmission.studentId}` : ''}
                   </Text>
                 )}
+                
+                
+                {/* Hiển thị file nộp */}
+                {selectedSubmission?.files && selectedSubmission.files.length > 0 && (
+                  <View style={styles.submissionFiles}>
+                    <Text style={styles.submissionFilesLabel}>File đính kèm:</Text>
+                    {selectedSubmission.files.map((file, idx) => {
+                      let displayName = 'File';
+                      if (file.includes('submission-')) {
+                        const parts = file.split('-');
+                        if (parts.length >= 4) {
+                          const afterTimestamp = parts.slice(3).join('-');
+                          displayName = afterTimestamp.split('/').pop()?.split('?')[0] || 'File';
+                        }
+                      } else {
+                        displayName = file.split('/').pop()?.split('?')[0] || 'File';
+                      }
+                      
+                      if (displayName.length > 30) {
+                        const ext = displayName.split('.').pop() || '';
+                        displayName = displayName.substring(0, 20) + '...' + ext;
+                      }
+                      
+                      return (
+                        <TouchableOpacity
+                          key={idx}
+                          style={styles.fileLink}
+                          onPress={() => {
+                            let fileUrl = file.trim();
+                            const BACKEND_URL = 'http://192.168.0.138:4000';
+                            
+                            if (!fileUrl.startsWith('http')) {
+                              fileUrl = fileUrl.replace(/\/$/, '');
+                              fileUrl = fileUrl.replace(/^.*?(files-|file-|avatar-|attachments-|submission-)/, '$1');
+                              fileUrl = fileUrl.startsWith('/') ? fileUrl : `/uploads/${fileUrl}`;
+                              fileUrl = `${BACKEND_URL}${fileUrl}`;
+                            }
+                            
+                            Linking.openURL(fileUrl).catch(err =>
+                              Alert.alert('Lỗi', `Không thể mở file: ${err.message || 'Định dạng không hỗ trợ hoặc lỗi đường dẫn.'}`),
+                            );
+                          }}
+                        >
+                          <Text style={styles.fileLinkText}>{displayName}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+
+                {selectedSubmission?.notes && (
+                  <View style={styles.submissionNotes}>
+                    <Text style={styles.submissionNotesLabel}>Ghi chú của sinh viên:</Text>
+                    <Text style={styles.submissionNotesText}>{selectedSubmission.notes}</Text>
+                  </View>
+                )}
+                
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Điểm số *</Text>
                   <Text style={[styles.cardMeta, { marginBottom: 6 }]}>
@@ -718,12 +917,31 @@ const TeacherAssignmentsScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowAssignmentPickerModal(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowAssignmentPickerModal(false)}
-        >
-          <View style={styles.dropdownModalContent}>
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+        }}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowAssignmentPickerModal(false)}
+          />
+          <View style={{
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 20,
+            width: '90%',
+            maxWidth: 400,
+            maxHeight: '70%',
+            elevation: 5,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 4,
+          }}>
             <Text style={styles.dropdownModalTitle}>Chọn bài tập</Text>
             <ScrollView>
               <TouchableOpacity
@@ -778,7 +996,7 @@ const TeacherAssignmentsScreen: React.FC = () => {
               ))}
             </ScrollView>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Class picker for assignment form */}
@@ -786,44 +1004,77 @@ const TeacherAssignmentsScreen: React.FC = () => {
         visible={showAssignmentClassPicker}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowAssignmentClassPicker(false)}
+        onRequestClose={() => {
+          console.log('🔴 Modal closed by back button');
+          setShowAssignmentClassPicker(false);
+        }}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowAssignmentClassPicker(false)}
-        >
-          <View style={styles.dropdownModalContent}>
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+        }}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => {
+              console.log('🔴 Overlay pressed - closing modal');
+              setShowAssignmentClassPicker(false);
+            }}
+          />
+          <View style={{
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 20,
+            width: '90%',
+            maxWidth: 400,
+            elevation: 5,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 4,
+          }}>
             <Text style={styles.dropdownModalTitle}>Chọn lớp giao bài</Text>
-            <ScrollView>
-              {classes.map(cls => (
-                <TouchableOpacity
-                  key={cls.id}
-                  style={[
-                    styles.dropdownItem,
-                    assignmentForm.classId === cls.id && styles.dropdownItemActive,
-                  ]}
-                  onPress={() => {
-                    setAssignmentForm(prev => ({ ...prev, classId: cls.id }));
-                    setShowAssignmentClassPicker(false);
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.dropdownItemText,
-                      assignmentForm.classId === cls.id && styles.dropdownItemTextActive,
-                    ]}
-                  >
-                    {cls.name}
+            <ScrollView style={{ maxHeight: 300 }}>
+              {classes.length === 0 ? (
+                <View style={{ padding: 20, alignItems: 'center' }}>
+                  <Text style={{ color: colors.textSecondary }}>
+                    Chưa có lớp học nào
                   </Text>
-                  {assignmentForm.classId === cls.id && (
-                    <Text style={styles.dropdownItemCheck}>✓</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
+                </View>
+              ) : (
+                classes.map(cls => (
+                  <TouchableOpacity
+                    key={cls.id}
+                    style={[
+                      styles.dropdownItem,
+                      assignmentForm.classId === cls.id && styles.dropdownItemActive,
+                    ]}
+                    onPress={() => {
+                      console.log('✅ Class selected:', cls.name);
+                      setAssignmentForm(prev => ({ ...prev, classId: cls.id }));
+                      setShowAssignmentClassPicker(false);
+                    }}
+                  >
+                    <Text
+                      style={[
+                        styles.dropdownItemText,
+                        assignmentForm.classId === cls.id && styles.dropdownItemTextActive,
+                      ]}
+                    >
+                      {cls.name}
+                    </Text>
+                    {assignmentForm.classId === cls.id && (
+                      <Text style={styles.dropdownItemCheck}>✓</Text>
+                    )}
+                  </TouchableOpacity>
+                ))
+              )}
             </ScrollView>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Class Filter Dropdown Modal */}
@@ -833,14 +1084,32 @@ const TeacherAssignmentsScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowClassFilterModal(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowClassFilterModal(false)}
-        >
-          <View style={styles.dropdownModalContent}>
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+        }}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowClassFilterModal(false)}
+          />
+          <View style={{
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 20,
+            width: '90%',
+            maxWidth: 400,
+            elevation: 5,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 4,
+          }}>
             <Text style={styles.dropdownModalTitle}>Chọn lớp học</Text>
-            <ScrollView>
+            <ScrollView style={{ maxHeight: 300 }}>
               <TouchableOpacity
                 style={[
                   styles.dropdownItem,
@@ -890,7 +1159,7 @@ const TeacherAssignmentsScreen: React.FC = () => {
               ))}
             </ScrollView>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
 
       {/* Status Filter Dropdown Modal */}
@@ -900,14 +1169,32 @@ const TeacherAssignmentsScreen: React.FC = () => {
         animationType="fade"
         onRequestClose={() => setShowStatusFilterModal(false)}
       >
-        <TouchableOpacity
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => setShowStatusFilterModal(false)}
-        >
-          <View style={styles.dropdownModalContent}>
+        <View style={{
+          flex: 1,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          justifyContent: 'center',
+          alignItems: 'center',
+          padding: 20,
+        }}>
+          <TouchableOpacity 
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowStatusFilterModal(false)}
+          />
+          <View style={{
+            backgroundColor: colors.surface,
+            borderRadius: 12,
+            padding: 20,
+            width: '90%',
+            maxWidth: 400,
+            elevation: 5,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: 0.25,
+            shadowRadius: 4,
+          }}>
             <Text style={styles.dropdownModalTitle}>Chọn trạng thái</Text>
-            <ScrollView>
+            <ScrollView style={{ maxHeight: 200 }}>
               <TouchableOpacity
                 style={[
                   styles.dropdownItem,
@@ -954,7 +1241,7 @@ const TeacherAssignmentsScreen: React.FC = () => {
               </TouchableOpacity>
             </ScrollView>
           </View>
-        </TouchableOpacity>
+        </View>
       </Modal>
     </View>
   );
@@ -1282,6 +1569,17 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontSize: 15,
   },
+  datePickerButton: {
+    justifyContent: 'center',
+  },
+  datePickerText: {
+    fontSize: 15,
+    color: colors.secondary,
+  },
+  datePickerPlaceholder: {
+    fontSize: 15,
+    color: colors.textSecondary,
+  },
   classChip: {
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -1358,6 +1656,53 @@ const styles = StyleSheet.create({
   checkboxLabel: {
     fontSize: 14,
     color: colors.secondary,
+  },
+  submissionFiles: {
+    marginTop: 12,
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  submissionFilesLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.secondary,
+    marginBottom: 8,
+  },
+  fileLink: {
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: colors.primaryLight,
+    borderRadius: 8,
+    marginBottom: 6,
+  },
+  fileLinkText: {
+    fontSize: 14,
+    color: colors.primary,
+    fontWeight: '500',
+  },
+  submissionNotes: {
+    marginTop: 12,
+    marginBottom: 12,
+    padding: 12,
+    backgroundColor: colors.background,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  submissionNotesLabel: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.secondary,
+    marginBottom: 6,
+  },
+  submissionNotesText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    lineHeight: 20,
   },
 });
 

@@ -13,10 +13,12 @@ import { errorHandler } from './middleware/errorHandler.js';
 import { swaggerUi, specs } from './docs/swagger.js';
 import { connectMongo } from './db/mongo.js';
 import { bootstrapIndexes } from './db/bootstrap.js';
-import { initializeSocket } from './services/socketService.js';
 import jwt from 'jsonwebtoken';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { ragEventService } from './services/rag/ragEventService.js';
+import { initializeSocket } from './services/socketService.js';
+
 
 const app = express();
 
@@ -34,9 +36,11 @@ if (server) {
         credentials: true
       }
     });
-    console.log('Socket.IO initialized');
-    // Initialize socket service
+    console.log('✅ Socket.IO initialized');
+    
+    // Initialize socketService with the io instance
     initializeSocket(io);
+    console.log('✅ Socket.IO service registered');
   } catch (error) {
     console.error('Socket.IO initialization failed:', error);
   }
@@ -44,20 +48,6 @@ if (server) {
 
 // Trust the first proxy (needed when behind dev proxy to respect X-Forwarded-For)
 app.set('trust proxy', 1);
-
-// Serve static files from uploads directory with proper headers
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-app.use('/uploads', (req, res, next) => {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET');
-  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
-  next();
-}, express.static(path.join(__dirname, '../uploads'), {
-  setHeaders: (res, filePath) => {
-    res.setHeader('Content-Disposition', 'attachment');
-  }
-}));
 
 const port = Number(process.env.PORT || 4000);
 
@@ -103,8 +93,23 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// security middlewares
-app.use(helmet());
+// security middlewares with custom CSP to allow file downloads
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: "cross-origin" },
+  contentSecurityPolicy: false, // Disable CSP for file serving
+}));
+
+// Serve static files from uploads directory with proper headers
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+app.use('/uploads', express.static(path.join(__dirname, '../uploads'), {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    // Allow inline viewing instead of forcing download
+    res.setHeader('Content-Disposition', 'inline');
+  }
+}));
 app.use(
   rateLimit({
     windowMs: 15 * 60 * 1000,
@@ -160,11 +165,7 @@ if (io) {
   io.on('connection', (socket) => {
   console.log('User connected:', socket.user.username, socket.id);
 
-  // Join user to their rooms automatically
-  socket.join(`user_${socket.user.id}`);
-  console.log(`User ${socket.user.username} joined their notification room`);
-
-  // Join user to their rooms (for backward compatibility)
+  // Join user to their rooms
   socket.on('join', (userId) => {
     // Verify user can only join their own room
     if (userId !== socket.user.id) {
@@ -524,6 +525,9 @@ if (process.env.VERCEL) {
   server.listen(port, async () => {
     await connectMongo();
     await bootstrapIndexes();
+
+    console.log('✅ RAG Event Service initialized');
+    console.log('   Auto-ingestion enabled for: assignments, announcements, documents, classes, comments');
     // eslint-disable-next-line no-console
     console.log(`Backend listening on http://localhost:${port}`);
   });

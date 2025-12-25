@@ -51,9 +51,37 @@ class SocketService {
   private setupConnectionHandlers() {
     if (!this.socket) return;
 
-    this.socket.on('connect', () => {
+    this.socket.on('connect', async () => {
       this.isConnected = true;
       console.log('✅ Socket connected:', this.socket?.id);
+      
+      // Join user room to receive notifications
+      // Get userId from JWT token
+      try {
+        const token = await AsyncStorage.getItem('accessToken');
+        if (token) {
+          // Decode JWT to get user ID (simple base64 decode, no verification needed for client)
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split('')
+              .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+              .join('')
+          );
+          const payload = JSON.parse(jsonPayload);
+          const userId = payload.id || payload.userId || payload.sub;
+          
+          if (userId) {
+            this.socket?.emit('join', userId);
+            console.log('✅ Joined user room:', userId);
+          } else {
+            console.warn('⚠️ No userId found in token');
+          }
+        }
+      } catch (error) {
+        console.error('❌ Failed to join user room:', error);
+      }
       
       // Listen for new notifications
       this.setupNotificationListener();
@@ -76,9 +104,15 @@ class SocketService {
     if (!this.socket) return;
 
     this.socket.on('new_notification', (notification) => {
-      console.log('New notification received:', notification.title);
+      console.log('📬 New notification received:', notification.title);
+      console.log('📬 Notification type:', notification.type);
+      console.log('📬 Full notification:', JSON.stringify(notification, null, 2));
+      
       if (this.notificationCallback) {
+        console.log('📬 Calling notification callback');
         this.notificationCallback(notification);
+      } else {
+        console.log('⚠️ No notification callback registered!');
       }
     });
   }

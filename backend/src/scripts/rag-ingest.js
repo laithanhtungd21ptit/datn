@@ -295,7 +295,7 @@ async function ingestSubmissions(options = {}) {
     text,
     title: `Bài nộp: ${item.assignmentId.title || ''}`,
     classId: item.assignmentId.classId || null,
-    rolesAllowed: ['admin', 'teacher'],
+    rolesAllowed: ['admin', 'teacher', 'student'],
     metadata: { 
       assignmentId: item.assignmentId._id, 
       assignmentTitle: item.assignmentId.title,

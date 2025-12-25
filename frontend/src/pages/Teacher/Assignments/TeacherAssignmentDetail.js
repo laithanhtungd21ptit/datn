@@ -258,19 +258,75 @@ const TeacherAssignmentDetail = () => {
                     <IconButton size="small" color="primary">
                       <Visibility />
                     </IconButton>
-                    {(submission.files || []).map((file, idx) => (
+                    {(submission.files || []).map((file, idx) => {
+                      // Extract original filename for tooltip
+                      let displayName = 'File';
+                      if (file.includes('submission-')) {
+                        const parts = file.split('-');
+                        if (parts.length >= 4) {
+                          const afterTimestamp = parts.slice(3).join('-');
+                          displayName = afterTimestamp.split('/').pop().split('?')[0];
+                        }
+                      } else {
+                        displayName = file.split('/').pop().split('?')[0];
+                      }
+                      
+                      return (
                       <IconButton
                         key={idx}
                         size="small"
                         color="primary"
+                        title={displayName} // Show filename on hover
                         onClick={() => {
+                          // Handle file viewing/preview
+                          let fileUrl = file.trim();
+                          
+                          if (fileUrl.startsWith('http')) {
+                            // Cloudinary URL - For Office files, use Google Docs Viewer
+                            const ext = fileUrl.split('.').pop().toLowerCase().split('?')[0];
+                            if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                              const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fileUrl)}&embedded=true`;
+                              window.open(viewerUrl, '_blank');
+                            } else {
+                              window.open(fileUrl, '_blank');
+                            }
+                            return;
+                          }
+                          
+                          // Fix local file path - handle various formats
+                          let filePath = fileUrl.replace(/\/$/, '');
+                          
+                          if (!filePath.startsWith('/uploads/') && !filePath.startsWith('http')) {
+                            // Extract just the filename part
+                            filePath = filePath.replace(/^.*?(files-|file-|avatar-|attachments-|submission-)/, '$1');
+                            filePath = `/uploads/${filePath}`;
+                          }
+                          
                           const backendUrl = process.env.REACT_APP_BACKEND_URL || 'http://localhost:4000';
-                          window.open(`${backendUrl}${file}`, '_blank');
+                          const fullUrl = `${backendUrl}${filePath}`;
+                          
+                          // Check file extension for preview options
+                          const ext = filePath.split('.').pop().toLowerCase();
+                          
+                          // For PDFs and images, open directly
+                          if (['pdf', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'txt'].includes(ext)) {
+                            window.open(fullUrl, '_blank');
+                          }
+                          // For Office files, use Google Docs Viewer
+                          else if (['doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx'].includes(ext)) {
+                            const viewerUrl = `https://docs.google.com/viewer?url=${encodeURIComponent(fullUrl)}&embedded=true`;
+                            window.open(viewerUrl, '_blank');
+                          }
+                          // Other files, open directly
+                          else {
+                            window.open(fullUrl, '_blank');
+                          }
                         }}
                       >
                         <Download />
                       </IconButton>
-                    ))}
+                      );
+                    })}
                   </TableCell>
                 </TableRow>
               ))}
